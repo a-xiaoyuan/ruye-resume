@@ -15,7 +15,7 @@ import {
 import { A4_HEIGHT_MM, findMissingChars, type PageHeight } from "../../../packages/engine/src/index.ts";
 import { sortByRecommended } from "../../../packages/templates/src/index.ts";
 import { loadRuntime, type Runtime } from "./runtime.ts";
-import { download, loadOutcome, openSession, saveCurrent } from "./storage.ts";
+import { download, loadOutcome, openSession, saveCurrent, saveStatusText, type SaveMode } from "./storage.ts";
 import { addModule, removeModule, syncTitle } from "./doc-ops.ts";
 import { ModuleNav } from "./components/ModuleNav.tsx";
 import { ModuleEditor } from "./components/ModuleEditor.tsx";
@@ -112,6 +112,8 @@ export function App() {
   const [doc, setDoc] = useState<RuyeDocument>(opened.doc);
   const [isSample, setIsSample] = useState(opened.isSample);
   const [persist, setPersist] = useState(opened.persist);
+  const [writeMode, setWriteMode] = useState<SaveMode>("merge");
+  const [savePhase, setSavePhase] = useState<"blocked" | "pending" | "saved" | "failed">(opened.persist ? "pending" : "blocked");
   const storageId = opened.storageId;
   const [rawBackup, setRawBackup] = useState<string | null>(opened.rawBackup);
   const [activeId, setActiveId] = useState<string | null>(() => opened.doc.modules[0]?.id ?? null);
@@ -131,13 +133,18 @@ export function App() {
   const mode = doc.layout.pageMode;
   const active = doc.modules.find((m) => m.id === activeId) ?? null;
 
-  const update = (next: RuyeDocument) => setDoc(syncTitle(next));
+  const update = (next: RuyeDocument) => {
+    if (persist) setSavePhase("pending");
+    setDoc(syncTitle(next));
+  };
   const remove = (next: RuyeDocument, what: string) => {
     setNotice({ text: `已删除${what}。`, undo: doc });
     update(next);
   };
   const replaceAll = (next: RuyeDocument) => {
     setPersist(true);
+    setWriteMode("replace");
+    setSavePhase("pending");
     setDoc(next);
     setActiveId(next.modules[0]?.id ?? null);
     setIsSample(false);
@@ -159,12 +166,21 @@ export function App() {
     return () => clearTimeout(t);
   }, [notice]);
 
-  // 本地自动保存。读档失败时 persist 为 false，避免用空白或示例盖掉原始数据
+  // 本地自动保存。读档失败时 persist 为 false。merge 写失败不会覆盖原档。
   useEffect(() => {
-    if (!persist) return;
-    const err = saveCurrent(doc, storageId ?? undefined);
-    if (err) setNotice({ text: err, level: "error", sticky: true });
-  }, [doc, persist, storageId]);
+    if (!persist) {
+      setSavePhase("blocked");
+      return;
+    }
+    const err = saveCurrent(doc, storageId ?? undefined, writeMode);
+    if (err) {
+      setSavePhase("failed");
+      setNotice({ text: `${err}屏幕上的内容还在。`, level: "error", sticky: true });
+    } else {
+      setSavePhase("saved");
+      if (writeMode === "replace") setWriteMode("merge");
+    }
+  }, [doc, persist, storageId, writeMode]);
 
   // 300ms 防抖后重新排版。预览和导出用同一个引擎、同一套 token 与页高
   useEffect(() => {
@@ -285,9 +301,9 @@ export function App() {
 
         <div className="doc-meta" title="标题由姓名与求职意向自动生成">
           <span className="doc-title">{doc.meta.title}</span>
-          <span className={`save-state${!persist ? " blocked" : issues.length > 0 ? " warn" : ""}`}>
+          <span className={`save-state${savePhase === "failed" || savePhase === "blocked" ? " blocked" : savePhase === "pending" ? " pending" : issues.length > 0 ? " warn" : ""}`}>
             <i aria-hidden="true" />
-            {!persist ? "未写入，以免覆盖无法读取的存档" : issues.length > 0 ? `草稿已保留（${issues.length} 处格式需修正）` : "仅保存在此浏览器"}
+            {saveStatusText(savePhase, issues.length)}
           </span>
         </div>
 

@@ -103,6 +103,8 @@ button.primary:hover:not(:disabled) { background: var(--brand-strong); border-co
 .save-state.warn i { background: var(--warn); }
 .save-state.blocked { color: var(--err); }
 .save-state.blocked i { background: var(--err); }
+.save-state.pending { color: var(--muted); }
+.save-state.pending i { background: var(--warn); }
 .actions { display: flex; align-items: center; gap: 8px; }
 
 /* 下拉菜单 */

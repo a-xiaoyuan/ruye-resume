@@ -3,7 +3,7 @@ import { beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { normalizeDate, recoverDocument, validateDocument, type RuyeDocument } from "../packages/schema/src/index.ts";
-import { loadOutcome, openSession, saveCurrent } from "../apps/web/src/storage.ts";
+import { loadOutcome, openSession, saveCurrent, saveStatusText } from "../apps/web/src/storage.ts";
 
 class MemoryStorage {
   m = new Map<string, string>();
@@ -132,6 +132,79 @@ test("存档不是合法 JSON 时不覆盖，也不换成示例", () => {
   assert.equal(session.doc.meta.title, "未命名简历");
   assert.equal(localStorage.getItem("ruye:documents"), "{这不是json");
   assert.ok(session.rawBackup?.includes("这不是json"));
+});
+
+test("条目列表缺失或姓名不是字符串时不进入编辑器，原始存档保持不动", () => {
+  const brokenItems = userDoc("2028-06");
+  const edu = brokenItems.modules.find((m) => m.type === "education");
+  if (edu && edu.type === "education") (edu.data as { items: unknown }).items = null;
+  const rawItems = JSON.stringify([{ id: "doc-1", doc: brokenItems }]);
+  localStorage.setItem("ruye:documents", rawItems);
+  localStorage.setItem("ruye:currentId", "doc-1");
+  assert.equal(recoverDocument(brokenItems), null);
+  const loadedItems = loadOutcome();
+  assert.equal(loadedItems.kind, "unreadable");
+  const sessionItems = openSession(loadedItems, sample());
+  assert.equal(sessionItems.persist, false);
+  assert.equal(sessionItems.isSample, false);
+  assert.equal(nameOf(sessionItems.doc), "");
+  assert.equal(localStorage.getItem("ruye:documents"), rawItems);
+  assert.ok(saveCurrent(sample())?.includes("未写入"));
+  assert.equal(localStorage.getItem("ruye:documents"), rawItems);
+
+  memory.m.clear();
+  const brokenName = userDoc("2028-06");
+  const basic = brokenName.modules[0];
+  if (basic.type === "basic_info") (basic.data as { name: unknown }).name = { family: "张" };
+  const rawName = JSON.stringify([{ id: "doc-1", doc: brokenName }]);
+  localStorage.setItem("ruye:documents", rawName);
+  assert.equal(recoverDocument(brokenName), null);
+  const loadedName = loadOutcome();
+  assert.equal(loadedName.kind, "unreadable");
+  assert.equal(openSession(loadedName, sample()).persist, false);
+  assert.equal(localStorage.getItem("ruye:documents"), rawName);
+  assert.ok(String(saveCurrent(sample()))?.includes("未写入"));
+  assert.equal(localStorage.getItem("ruye:documents"), rawName);
+});
+
+test("保存读失败或现有存档损坏时不写盘；明确 replace 才覆盖", () => {
+  localStorage.setItem("ruye:documents", "{坏档");
+  const mergeErr = saveCurrent(userDoc("2024-09"));
+  assert.ok(mergeErr?.includes("未写入"));
+  assert.equal(localStorage.getItem("ruye:documents"), "{坏档");
+  assert.equal(saveCurrent(userDoc("2024-09"), "doc-1", "replace"), null);
+  assert.ok(localStorage.getItem("ruye:documents")!.includes("张三"));
+
+  memory.m.clear();
+  const kept = JSON.stringify([{ id: "doc-1", doc: userDoc("2024年秋") }]);
+  memory.m.set("ruye:documents", kept);
+  const originalGet = memory.getItem.bind(memory);
+  memory.getItem = () => {
+    throw new Error("QuotaExceededError");
+  };
+  const readErr = saveCurrent(userDoc("2024-09"));
+  memory.getItem = originalGet;
+  assert.ok(readErr?.includes("未写入"));
+  assert.equal(memory.m.get("ruye:documents"), kept);
+
+  const originalSet = memory.setItem.bind(memory);
+  memory.setItem = (k: string) => {
+    if (k === "ruye:documents") throw new Error("QuotaExceededError");
+    originalSet(k, "x");
+  };
+  const writeErr = saveCurrent(userDoc("2024-09"), "doc-1", "replace");
+  memory.setItem = originalSet;
+  assert.ok(writeErr?.includes("未写入"));
+  assert.equal(memory.m.get("ruye:documents"), kept);
+});
+
+test("保存失败时状态文案不说草稿已保留", () => {
+  assert.equal(saveStatusText("failed", 2), "保存失败，未写入本机");
+  assert.equal(saveStatusText("failed", 2).includes("已保留"), false);
+  assert.equal(saveStatusText("blocked", 1), "未写入，以免覆盖无法读取的存档");
+  assert.equal(saveStatusText("saved", 1), "草稿已保留（1 处格式需修正）");
+  assert.equal(saveStatusText("saved", 0), "仅保存在此浏览器");
+  assert.equal(saveStatusText("pending", 1), "正在写入本机…");
 });
 
 test("JSON 备份里的非法日期可以再导入，姓名和学校还在", () => {

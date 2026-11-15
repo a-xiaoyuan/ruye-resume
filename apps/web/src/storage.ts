@@ -93,30 +93,64 @@ export function loadOutcome(): LoadOutcome {
   return { kind: "unreadable", message: "本地存档里没有可恢复的简历，已原样保留，没有用示例覆盖。", raw };
 }
 
-/** 保存当前文档，包括尚未通过校验的草稿。返回错误信息（例如超出配额）或 null */
-export function saveCurrent(doc: RuyeDocument, id?: string): string | null {
+export type SaveMode = "merge" | "replace";
+
+/** 顶栏文案。只有写入成功才说「已保留」。 */
+export function saveStatusText(phase: "blocked" | "pending" | "saved" | "failed", issueCount: number): string {
+  if (phase === "blocked") return "未写入，以免覆盖无法读取的存档";
+  if (phase === "failed") return "保存失败，未写入本机";
+  if (phase === "pending") return "正在写入本机…";
+  if (issueCount > 0) return `草稿已保留（${issueCount} 处格式需修正）`;
+  return "仅保存在此浏览器";
+}
+
+/**
+ * 保存当前文档。merge 在读不到或无法安全识别现有存档时直接失败，不写盘。
+ * replace 只用于用户明确新建、载入示例或导入，允许覆盖原先无法打开的存档。
+ */
+export function saveCurrent(doc: RuyeDocument, id?: string, mode: SaveMode = "merge"): string | null {
+  let current: string;
   try {
-    const current = id ?? localStorage.getItem(CURRENT_KEY) ?? "doc-1";
+    current = id ?? localStorage.getItem(CURRENT_KEY) ?? "doc-1";
+  } catch (e) {
+    return `本地保存失败：${(e as Error).message}。未写入。`;
+  }
+  let others: Record<string, unknown>[] = [];
+  if (mode === "merge") {
+    const existing = readForMerge(current);
+    if (!existing.ok) return existing.message;
+    others = existing.others;
+  }
+  try {
     const stored = { id: current, doc: { ...doc, meta: { ...doc.meta, updatedAt: new Date().toISOString() } } };
-    const others = otherEntries(current);
     localStorage.setItem(DOCS_KEY, JSON.stringify([stored, ...others]));
     localStorage.setItem(CURRENT_KEY, current);
     return null;
   } catch (e) {
-    return `本地保存失败：${(e as Error).message}`;
+    return `本地保存失败：${(e as Error).message}。未写入。`;
   }
 }
 
-function otherEntries(id: string): Record<string, unknown>[] {
+function readForMerge(id: string): { ok: true; others: Record<string, unknown>[] } | { ok: false; message: string } {
+  let raw: string | null;
   try {
-    const raw = localStorage.getItem(DOCS_KEY);
-    if (!raw) return [];
-    const list = JSON.parse(raw) as unknown;
-    if (!Array.isArray(list)) return [];
-    return list.filter((x): x is Record<string, unknown> => isObj(x) && x.id !== id);
-  } catch {
-    return [];
+    raw = localStorage.getItem(DOCS_KEY);
+  } catch (e) {
+    return { ok: false, message: `本地保存失败：无法读取现有存档（${(e as Error).message}）。未写入，以免覆盖。` };
   }
+  if (raw === null || raw === "") return { ok: true, others: [] };
+  let list: unknown;
+  try {
+    list = JSON.parse(raw);
+  } catch {
+    return { ok: false, message: "本地保存失败：现有存档不是合法 JSON。未写入，以免覆盖。" };
+  }
+  if (!Array.isArray(list)) return { ok: false, message: "本地保存失败：现有存档无法识别。未写入，以免覆盖。" };
+  const current = list.find((x) => isObj(x) && x.id === id);
+  if (current && isObj(current) && "doc" in current && recoverDocument(current.doc) === null) {
+    return { ok: false, message: "本地保存失败：现有存档无法在编辑器中安全打开。未写入，以免覆盖。" };
+  }
+  return { ok: true, others: list.filter((x): x is Record<string, unknown> => isObj(x) && x.id !== id) };
 }
 
 export function download(name: string, data: BlobPart, type: string): void {

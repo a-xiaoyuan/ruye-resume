@@ -258,6 +258,90 @@ export function validateDocument(input: unknown): ValidationResult {
   return { ok: true, doc: input as unknown as RuyeDocument };
 }
 
+/**
+ * 字段不合法时仍拿回文档，供编辑器修正。
+ * 只接受界面会直接读取的形状：文本是字符串（因此「2024年秋」这种非法日期仍可恢复），
+ * 列表必须是数组。缺数组、姓名/条目字段是对象等情况返回 null，避免 map / trim 崩溃。
+ * 不改写原值。合法文档 issues 为空。
+ */
+export function recoverDocument(input: unknown): { doc: RuyeDocument; issues: ValidationIssue[] } | null {
+  const result = validateDocument(input);
+  if (result.ok) return { doc: result.doc, issues: [] };
+  if (!isRecoverableDraft(input)) return null;
+  return { doc: input, issues: result.issues };
+}
+
+/** 缺省或字符串。null、对象、数组都会在 trim 或输入框里出问题。 */
+function isText(v: unknown): boolean {
+  return v === undefined || typeof v === "string";
+}
+
+/** 缺省、null，或字符串数组。表单用 `?? []` 消化 null；字符串本身会被当成可 map 的列表。 */
+function isTextList(v: unknown): boolean {
+  if (v === undefined || v === null) return true;
+  return Array.isArray(v) && v.every((x) => typeof x === "string");
+}
+
+function isId(v: unknown): boolean {
+  return typeof v === "string" && v !== "";
+}
+
+function isRecoverableDraft(input: unknown): input is RuyeDocument {
+  if (!isObj(input)) return false;
+  if (!isObj(input.meta) || typeof input.meta.title !== "string") return false;
+  if (!isObj(input.layout)) return false;
+  if (!Array.isArray(input.modules)) return false;
+  return input.modules.every(isRecoverableModule);
+}
+
+function isRecoverableModule(m: unknown): boolean {
+  if (!isObj(m) || !isId(m.id) || typeof m.visible !== "boolean") return false;
+  if (!MODULE_TYPES.includes(m.type as ModuleType) || !isObj(m.data)) return false;
+  const d = m.data;
+  switch (m.type) {
+    case "basic_info":
+      return (
+        isText(d.name) &&
+        ["photoDataUrl", "gender", "birthday", "phone", "email", "location", "website", "github", "blog"].every((k) => isText(d[k])) &&
+        isLinkList(d.customLinks)
+      );
+    case "job_intention":
+      return ["role", "city", "availability", "salary"].every((k) => isText(d[k]));
+    case "education":
+      return isItemList(d.items, (it) => isText(it.school) && isText(it.major) && isText(it.degree) && isText(it.start) && isText(it.end) && isTextList(it.highlights));
+    case "work":
+    case "internship":
+      return isItemList(d.items, (it) => isText(it.org) && isText(it.title) && isText(it.start) && isText(it.end) && isText(it.summary) && isTextList(it.techStack) && isTextList(it.bullets));
+    case "project":
+      return isItemList(
+        d.items,
+        (it) => isText(it.name) && isText(it.role) && isText(it.start) && isText(it.end) && isText(it.url) && isText(it.summary) && isTextList(it.techStack) && isTextList(it.bullets),
+      );
+    case "skills":
+      return (
+        Array.isArray(d.categories) &&
+        d.categories.every((c) => isObj(c) && isId(c.id) && isText(c.name) && isTextList(c.items))
+      );
+    case "research":
+      return isItemList(d.items, (it) => isText(it.name) && isText(it.org) && isText(it.start) && isText(it.end) && isTextList(it.bullets));
+    case "paper":
+      return isItemList(d.items, (it) => isText(it.title) && isText(it.venue) && isText(it.date) && isText(it.authors) && isText(it.url));
+    case "award":
+      return isItemList(d.items, (it) => isText(it.name) && isText(it.issuer) && isText(it.date) && isText(it.description));
+    default:
+      return false;
+  }
+}
+
+function isItemList(v: unknown, itemOk: (it: Record<string, unknown>) => boolean): boolean {
+  return Array.isArray(v) && v.every((it) => isObj(it) && isId(it.id) && itemOk(it));
+}
+
+function isLinkList(v: unknown): boolean {
+  if (v === undefined || v === null) return true;
+  return Array.isArray(v) && v.every((l) => isObj(l) && typeof l.label === "string" && typeof l.url === "string");
+}
+
 const nonEmpty = (s: string | undefined): boolean => s !== undefined && s.trim() !== "";
 
 /** 模块是否「内容全空」：全空的模块不渲染，也不参与高度计算 */

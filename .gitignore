@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.vite/
+*.log
+.DS_Store
+
+# 字体：源文件不进仓库，用 pnpm fonts 下载并生成子集
+fonts-src/
+apps/web/public/fonts/
+packages/templates/fonts/
+# 构建时从 node_modules 复制的 wasm
+apps/web/public/wasm/
+
+# 测试与 smoke 产物
+out/

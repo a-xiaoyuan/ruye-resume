@@ -1,0 +1,385 @@
+// Markdown 导入/导出（对称格式，见 docs/DESIGN.md §9）。
+// 导入是「尽力而为」：## 为模块，### 为条目，认不出的段落放进最近条目的 bullets。
+
+import { MODULE_LABELS, PAGE_MODES, TEMPLATE_IDS, type Module, type ModuleType, type PageMode, type RuyeDocument, type TemplateId } from "./types.ts";
+import { normalizeDate, PRESENT } from "./validate.ts";
+
+const SEP = " · ";
+const LIST_SPLIT = /[、,，;；]\s*/;
+
+function displayDate(d: string | undefined): string {
+  if (!d) return "";
+  if (d === PRESENT) return d;
+  return d.replace(/-/g, ".");
+}
+
+function dateRange(start?: string, end?: string): string {
+  const a = displayDate(start);
+  const b = displayDate(end);
+  if (!a && !b) return "";
+  return `${a} - ${b}`.trim();
+}
+
+function joinTitle(...parts: (string | undefined)[]): string {
+  return parts.filter((p): p is string => !!p && p.trim() !== "").join(SEP);
+}
+
+const BASIC_FIELDS: [keyof BasicFields, string][] = [
+  ["phone", "电话"],
+  ["email", "邮箱"],
+  ["location", "地点"],
+  ["gender", "性别"],
+  ["birthday", "生日"],
+  ["website", "网站"],
+  ["github", "GitHub"],
+  ["blog", "博客"],
+];
+type BasicFields = { phone?: string; email?: string; location?: string; gender?: string; birthday?: string; website?: string; github?: string; blog?: string };
+
+const INTENT_FIELDS: [string, string][] = [
+  ["role", "岗位"],
+  ["city", "城市"],
+  ["availability", "到岗"],
+  ["salary", "期望薪资"],
+];
+
+function kv(label: string, value: string | undefined): string[] {
+  return value && value.trim() !== "" ? [`- ${label}：${value}`] : [];
+}
+
+export function toMarkdown(doc: RuyeDocument): string {
+  const out: string[] = [];
+  out.push("---", `title: ${doc.meta.title}`, `template: ${doc.layout.templateId}`, `pageMode: ${doc.layout.pageMode}`, "---", "");
+
+  for (const m of doc.modules) {
+    const hidden = m.visible ? "" : " <!-- hidden -->";
+    if (m.type === "basic_info") {
+      out.push(`# ${m.data.name}${hidden}`);
+      for (const [k, label] of BASIC_FIELDS) out.push(...kv(label, m.data[k]));
+      for (const l of m.data.customLinks ?? []) out.push(`- ${l.label}：${l.url}`);
+      out.push("");
+      continue;
+    }
+    out.push(`## ${MODULE_LABELS[m.type]}${hidden}`);
+    switch (m.type) {
+      case "job_intention":
+        for (const [k, label] of INTENT_FIELDS) out.push(...kv(label, (m.data as Record<string, string | undefined>)[k]));
+        break;
+      case "education":
+        for (const it of m.data.items) {
+          out.push(`### ${joinTitle(it.school, it.major, it.degree)}`);
+          const r = dateRange(it.start, it.end);
+          if (r) out.push(r);
+          for (const h of it.highlights) out.push(`- ${h}`);
+        }
+        break;
+      case "work":
+      case "internship":
+        for (const it of m.data.items) {
+          out.push(`### ${joinTitle(it.org, it.title)}`);
+          const r = dateRange(it.start, it.end);
+          if (r) out.push(r);
+          out.push(...kv("简介", it.summary));
+          if (it.techStack?.length) out.push(`- 技术栈：${it.techStack.join("、")}`);
+          for (const b of it.bullets) out.push(`- ${b}`);
+        }
+        break;
+      case "project":
+        for (const it of m.data.items) {
+          out.push(`### ${joinTitle(it.name, it.role)}`);
+          const r = dateRange(it.start, it.end);
+          if (r) out.push(r);
+          out.push(...kv("链接", it.url));
+          out.push(...kv("简介", it.summary));
+          if (it.techStack?.length) out.push(`- 技术栈：${it.techStack.join("、")}`);
+          for (const b of it.bullets) out.push(`- ${b}`);
+        }
+        break;
+      case "skills":
+        for (const c of m.data.categories) out.push(`- ${c.name}：${c.items.join("、")}`);
+        break;
+      case "research":
+        for (const it of m.data.items) {
+          out.push(`### ${joinTitle(it.name, it.org)}`);
+          const r = dateRange(it.start, it.end);
+          if (r) out.push(r);
+          for (const b of it.bullets) out.push(`- ${b}`);
+        }
+        break;
+      case "paper":
+        for (const it of m.data.items) {
+          out.push(`### ${it.title}`);
+          out.push(...kv("期刊/会议", it.venue), ...kv("作者", it.authors), ...kv("日期", displayDate(it.date)), ...kv("链接", it.url));
+        }
+        break;
+      case "award":
+        for (const it of m.data.items) {
+          out.push(`### ${joinTitle(it.name, it.issuer)}`);
+          out.push(...kv("日期", displayDate(it.date)), ...kv("说明", it.description));
+        }
+        break;
+    }
+    out.push("");
+  }
+  return out.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n";
+}
+
+// ---------------------------------------------------------------- 导入
+
+const HEADING_ALIASES: Record<string, ModuleType> = {
+  基本信息: "basic_info",
+  个人信息: "basic_info",
+  求职意向: "job_intention",
+  教育背景: "education",
+  教育经历: "education",
+  工作经历: "work",
+  工作经验: "work",
+  实习经历: "internship",
+  实习经验: "internship",
+  项目经历: "project",
+  项目经验: "project",
+  专业技能: "skills",
+  技能: "skills",
+  技术栈: "skills",
+  科研经历: "research",
+  论文发表: "paper",
+  论文: "paper",
+  获奖情况: "award",
+  荣誉奖项: "award",
+  获奖: "award",
+};
+
+export interface MarkdownImportResult {
+  doc: RuyeDocument;
+  warnings: string[];
+}
+
+const DATE_LINE = /^(\S+?)\s*(?:-|–|—|~|～|至)\s*(\S+)$/;
+const KV_LINE = /^([^：:]{1,12})[：:]\s*(.*)$/;
+
+function splitTitle(s: string): string[] {
+  return s.split(/\s*[·|｜]\s*/).map((x) => x.trim()).filter(Boolean);
+}
+
+function stripHidden(s: string): { text: string; hidden: boolean } {
+  const hidden = /<!--\s*hidden\s*-->/.test(s);
+  return { text: s.replace(/<!--.*?-->/g, "").trim(), hidden };
+}
+
+function parseDateLine(line: string): [string, string] | null {
+  const m = line.match(DATE_LINE);
+  if (!m) return null;
+  const a = normalizeDate(m[1]);
+  const b = normalizeDate(m[2]);
+  const ok = (d: string) => d === PRESENT || /^\d{4}-\d{2}(-\d{2})?$/.test(d);
+  return ok(a) && ok(b) ? [a, b] : null;
+}
+
+export function fromMarkdown(src: string): MarkdownImportResult {
+  const warnings: string[] = [];
+  const lines = src.replace(/\r\n?/g, "\n").split("\n");
+  let i = 0;
+  let title = "";
+  let templateId: TemplateId = "campus-serif";
+  let pageMode: PageMode = "fit-a4";
+
+  if (lines[0]?.trim() === "---") {
+    i = 1;
+    for (; i < lines.length && lines[i].trim() !== "---"; i++) {
+      const m = lines[i].match(/^(\w+):\s*(.*)$/);
+      if (!m) continue;
+      if (m[1] === "title") title = m[2].trim();
+      if (m[1] === "template" && TEMPLATE_IDS.includes(m[2].trim() as TemplateId)) templateId = m[2].trim() as TemplateId;
+      if (m[1] === "pageMode" && PAGE_MODES.includes(m[2].trim() as PageMode)) pageMode = m[2].trim() as PageMode;
+    }
+    i++;
+  }
+
+  const modules: Module[] = [];
+  const counters: Record<string, number> = {};
+  const nextId = (prefix: string) => {
+    counters[prefix] = (counters[prefix] ?? 0) + 1;
+    return `${prefix}-${counters[prefix]}`;
+  };
+
+  let current: Module | null = null;
+  // 位于未识别的 ## 模块之下：其内容整体跳过（已在标题处给出一条警告）
+  let skipping = false;
+  // 当前条目（指向 data.items 中的最后一项）
+  let item: Record<string, unknown> | null = null;
+
+  const basic = (): Extract<Module, { type: "basic_info" }> => {
+    let m = modules.find((x) => x.type === "basic_info");
+    if (!m) {
+      m = { id: "m-basic_info", type: "basic_info", visible: true, data: { name: "" } };
+      modules.unshift(m);
+    }
+    return m as Extract<Module, { type: "basic_info" }>;
+  };
+
+  const startModule = (type: ModuleType, hidden: boolean): Module => {
+    const existing = modules.find((x) => x.type === type);
+    if (existing) return existing;
+    const base = { id: `m-${type}`, visible: !hidden };
+    let m: Module;
+    switch (type) {
+      case "basic_info":
+        return basic();
+      case "job_intention":
+        m = { ...base, type, data: {} };
+        break;
+      case "skills":
+        m = { ...base, type, data: { categories: [] } };
+        break;
+      default:
+        m = { ...base, type, data: { items: [] } } as Module;
+    }
+    modules.push(m);
+    return m;
+  };
+
+  const startItem = (heading: string) => {
+    if (!current || current.type === "basic_info" || current.type === "job_intention" || current.type === "skills") {
+      warnings.push(`「${heading}」不属于任何经历类模块，已忽略`);
+      item = null;
+      return;
+    }
+    const parts = splitTitle(heading);
+    const id = nextId(current.type);
+    let it: Record<string, unknown>;
+    switch (current.type) {
+      case "education":
+        it = { id, school: parts[0] ?? "", major: parts[1], degree: parts[2], start: "", end: "", highlights: [] };
+        break;
+      case "work":
+      case "internship":
+        it = { id, org: parts[0] ?? "", title: parts[1] ?? "", start: "", end: "", bullets: [] };
+        break;
+      case "project":
+        it = { id, name: parts[0] ?? "", role: parts[1], bullets: [] };
+        break;
+      case "research":
+        it = { id, name: parts[0] ?? "", org: parts[1], bullets: [] };
+        break;
+      case "paper":
+        it = { id, title: heading };
+        break;
+      case "award":
+        it = { id, name: parts[0] ?? "", issuer: parts[1] };
+        break;
+    }
+    for (const k of Object.keys(it)) if (it[k] === undefined) delete it[k];
+    (current.data as { items: unknown[] }).items.push(it);
+    item = it;
+  };
+
+  const bulletKey = (m: Module) => (m.type === "education" ? "highlights" : "bullets");
+
+  const addBullet = (text: string) => {
+    if (!current) {
+      warnings.push(`无法归属的内容：「${text}」`);
+      return;
+    }
+    if (current.type === "basic_info") {
+      const kvm = text.match(KV_LINE);
+      if (!kvm) {
+        warnings.push(`基本信息中无法识别：「${text}」`);
+        return;
+      }
+      const field = BASIC_FIELDS.find(([, label]) => label.toLowerCase() === kvm[1].trim().toLowerCase());
+      if (field) (current.data as Record<string, unknown>)[field[0]] = kvm[2].trim();
+      else (current.data.customLinks ??= []).push({ label: kvm[1].trim(), url: kvm[2].trim() });
+      return;
+    }
+    if (current.type === "job_intention") {
+      const kvm = text.match(KV_LINE);
+      const field = kvm && INTENT_FIELDS.find(([, label]) => label === kvm[1].trim());
+      if (kvm && field) (current.data as Record<string, unknown>)[field[0]] = kvm[2].trim();
+      else warnings.push(`求职意向中无法识别：「${text}」`);
+      return;
+    }
+    if (current.type === "skills") {
+      const kvm = text.match(KV_LINE);
+      const name = kvm ? kvm[1].trim() : "技能";
+      const rest = kvm ? kvm[2] : text;
+      current.data.categories.push({ id: nextId("skill"), name, items: rest.split(LIST_SPLIT).map((s) => s.trim()).filter(Boolean) });
+      return;
+    }
+    if (!item) {
+      warnings.push(`「${MODULE_LABELS[current.type]}」中没有条目标题（###），已忽略：「${text}」`);
+      return;
+    }
+    const kvm = text.match(KV_LINE);
+    if (kvm) {
+      const label = kvm[1].trim();
+      const value = kvm[2].trim();
+      const set = (k: string, v: unknown) => {
+        item![k] = v;
+      };
+      const t = current.type;
+      if (label === "简介" && (t === "work" || t === "internship" || t === "project")) return set("summary", value);
+      if (label === "技术栈" && (t === "work" || t === "internship" || t === "project")) return set("techStack", value.split(LIST_SPLIT).filter(Boolean));
+      if (label === "链接" && (t === "project" || t === "paper")) return set("url", value);
+      if (label === "期刊/会议" && t === "paper") return set("venue", value);
+      if (label === "作者" && t === "paper") return set("authors", value);
+      if (label === "日期" && (t === "paper" || t === "award")) return set("date", normalizeDate(value));
+      if (label === "说明" && t === "award") return set("description", value);
+    }
+    const key = bulletKey(current);
+    if (current.type === "paper" || current.type === "award") {
+      // 这两类没有 bullets：追加到描述
+      const k = current.type === "award" ? "description" : "venue";
+      item[k] = item[k] ? `${item[k]}；${text}` : text;
+      return;
+    }
+    (item[key] as string[]).push(text);
+  };
+
+  for (; i < lines.length; i++) {
+    const raw = lines[i];
+    const line = raw.trim();
+    if (line === "") continue;
+
+    let m: RegExpMatchArray | null;
+    if (skipping && !/^#{1,2}\s/.test(line)) continue;
+    skipping = false;
+    if ((m = line.match(/^#\s+(.*)$/))) {
+      const { text, hidden } = stripHidden(m[1]);
+      const b = basic();
+      b.data.name = text;
+      b.visible = !hidden;
+      current = b;
+      item = null;
+    } else if ((m = line.match(/^##\s+(.*)$/))) {
+      const { text, hidden } = stripHidden(m[1]);
+      const type = HEADING_ALIASES[text];
+      if (!type) {
+        warnings.push(`未识别的模块标题「${text}」，其内容已跳过`);
+        current = null;
+        skipping = true;
+      } else current = startModule(type, hidden);
+      item = null;
+    } else if ((m = line.match(/^###\s+(.*)$/))) {
+      startItem(m[1].trim());
+    } else if ((m = line.match(/^[-*+]\s+(.*)$/))) {
+      addBullet(m[1].trim());
+    } else {
+      const range = item ? parseDateLine(line) : null;
+      if (range && item && current && current.type !== "paper" && current.type !== "award" && !item.start) {
+        item.start = range[0];
+        item.end = range[1];
+      } else addBullet(line);
+    }
+  }
+
+  const info = basic();
+  const intent = modules.find((x) => x.type === "job_intention");
+  const role = intent && intent.type === "job_intention" ? intent.data.role : undefined;
+  const doc: RuyeDocument = {
+    version: 1,
+    meta: { title: title || [info.data.name, role].filter(Boolean).join("-") || "简历", locale: "zh-CN", updatedAt: new Date().toISOString() },
+    layout: { templateId, pageMode },
+    modules,
+  };
+  return { doc, warnings };
+}

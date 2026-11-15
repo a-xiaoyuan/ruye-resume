@@ -5,6 +5,7 @@ import {
   MODULE_TYPES,
   PAGE_MODES,
   TEMPLATE_IDS,
+  THEME_IDS,
   type Module,
   type ModuleType,
   type RuyeDocument,
@@ -216,6 +217,9 @@ export function validateDocument(input: unknown): ValidationResult {
     }
     if (!PAGE_MODES.includes(input.layout.pageMode as never)) {
       ctx.fail("$.layout.pageMode", `未知页面模式：${String(input.layout.pageMode)}`);
+    }
+    if (input.layout.theme !== undefined && !THEME_IDS.includes(input.layout.theme as never)) {
+      ctx.fail("$.layout.theme", `未知主题色：${String(input.layout.theme)}`);
     }
   }
 

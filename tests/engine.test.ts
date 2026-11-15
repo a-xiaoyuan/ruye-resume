@@ -12,7 +12,7 @@ import {
   READABILITY_FLOOR,
   type TypographyTokens,
 } from "../packages/engine/src/index.ts";
-import { CAMPUS_SERIF_TOKENS } from "../packages/templates/src/index.ts";
+import { sortByRecommended, TEMPLATE_META } from "../packages/templates/src/index.ts";
 import { loadNodeTemplates } from "../packages/templates/src/node.ts";
 import { FakeBackend } from "./helpers/fake-backend.ts";
 
@@ -38,8 +38,16 @@ function assertAboveFloor(t: TypographyTokens) {
   for (const v of Object.values(t.pageMarginMm)) assert.ok(v >= f.pageMarginMm, "页边距低于 12mm");
 }
 
-test("模板 token 满足可读性底线", () => {
-  assert.deepEqual(checkTokenFloors(CAMPUS_SERIF_TOKENS.default, CAMPUS_SERIF_TOKENS.floor), []);
+test("三套模板的 token 都满足可读性底线", () => {
+  assert.equal(TEMPLATE_META.length, 3);
+  for (const m of TEMPLATE_META) assert.deepEqual(checkTokenFloors(m.tokens.default, m.tokens.floor), [], m.id);
+});
+
+test("按模板推荐顺序排列模块", () => {
+  const doc = load("long");
+  const sorted = sortByRecommended(doc, "social-sans");
+  assert.deepEqual(sorted.modules.slice(0, 4).map((m) => m.type), ["basic_info", "job_intention", "skills", "internship"]);
+  assert.equal(sorted.modules.length, doc.modules.length);
 });
 
 test("解析 typst.ts SVG 根元素尺寸", () => {

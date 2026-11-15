@@ -10,10 +10,13 @@ import { loadNodeTemplates } from "../packages/templates/src/node.ts";
 import { loadCharset, loadNodeTypst } from "../scripts/typst-node.ts";
 
 const load = (name: string): RuyeDocument => JSON.parse(readFileSync(new URL(`../fixtures/${name}.ruye.json`, import.meta.url), "utf8"));
-const template = loadNodeTemplates().get("campus-serif")!;
+const templates = loadNodeTemplates();
+const template = templates.get("campus-serif")!;
 const loaded = await loadNodeTypst();
 const skip = "skip" in loaded ? loaded.skip : false;
 const outDir = new URL("../out/", import.meta.url);
+// 1x1 灰色 PNG
+const PHOTO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGOYOXMmAAOaAcwPZWQaAAAAAElFTkSuQmCC";
 
 /** 尽力从 PDF 里读页面尺寸（Typst 可能压缩对象流，读不到就返回空数组） */
 function pdfMediaBoxes(pdf: Uint8Array): number[][] {
@@ -106,10 +109,51 @@ describe("Typst 黄金测试", { skip }, () => {
     for (const name of ["short", "medium", "long"]) assert.deepEqual(findMissingChars(load(name), loadCharset()), []);
   });
 
+  for (const id of ["social-sans", "split-compact"] as const) {
+    test(`${id}：短样本一页、长样本 continuous 一页、带照片和主题色可编译`, async () => {
+      const t = templates.get(id)!;
+      const short = await engine.fitA4(load("short"), t);
+      assert.ok(short.status === "fitted-default" || short.status === "fitted-tightened", short.status);
+      assert.equal(short.metrics.pageCount, 1);
+      const long = await engine.continuous(load("long"), t);
+      assert.equal(long.status, "continuous");
+      assert.equal(long.metrics.pageCount, 1);
+      const std = await engine.standard(load("long"), t);
+      assert.ok(std.metrics.pageCount >= 1);
+      const doc = load("short");
+      doc.layout.theme = "wine";
+      if (doc.modules[0].type === "basic_info") doc.modules[0].data.photoDataUrl = PHOTO;
+      const pdf = await engine.pdf(doc, t, t.defaultTokens, A4_HEIGHT_MM);
+      writeFileSync(new URL(`${id}-short-photo.pdf`, outDir), pdf);
+      assert.equal(new TextDecoder("latin1").decode(pdf.slice(0, 5)), "%PDF-");
+    });
+  }
+
+  test("campus-serif：带照片、四种主题色都能编译", async () => {
+    for (const theme of ["ink", "teal", "wine", "graphite"] as const) {
+      const doc = load("short");
+      doc.layout.theme = theme;
+      if (doc.modules[0].type === "basic_info") doc.modules[0].data.photoDataUrl = PHOTO;
+      const svg = await engine.svg(doc, template, template.defaultTokens, A4_HEIGHT_MM);
+      assert.ok(svg.includes("typst-doc"), theme);
+    }
+  });
+
   test("用户文本里的 Typst 特殊字符原样显示，不报错", async () => {
     const doc = load("short");
     if (doc.modules[0].type === "basic_info") doc.modules[0].data.name = '林#知*夏_$x$ @ref <lbl> \\ "引号"';
-    const svg = await engine.svg(doc, template, template.defaultTokens, A4_HEIGHT_MM);
-    assert.ok(svg.includes("typst-doc"));
+    for (const t of templates.values()) {
+      const svg = await engine.svg(doc, t, t.defaultTokens, A4_HEIGHT_MM);
+      assert.ok(svg.includes("typst-doc"), t.id);
+    }
+  });
+
+  test("没有基本信息模块、只有正文模块时也能排版", async () => {
+    const doc = load("short");
+    doc.modules = doc.modules.filter((m) => m.type !== "basic_info" && m.type !== "job_intention");
+    for (const t of templates.values()) {
+      const svg = await engine.svg(doc, t, t.defaultTokens, A4_HEIGHT_MM);
+      assert.ok(svg.includes("typst-doc"), t.id);
+    }
   });
 });

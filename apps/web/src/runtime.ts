@@ -5,7 +5,10 @@ import { $typst, TypstSnippet } from "@myriaddreamin/typst.ts/dist/esm/contrib/s
 import { initTypst, LayoutEngine, TypstSnippetBackend, type TemplateDef } from "../../../packages/engine/src/index.ts";
 import { createTemplates } from "../../../packages/templates/src/index.ts";
 import type { TemplateId } from "../../../packages/schema/src/index.ts";
+import common from "../../../packages/templates/typst/common.typ?raw";
 import campusSerif from "../../../packages/templates/typst/campus-serif.typ?raw";
+import socialSans from "../../../packages/templates/typst/social-sans.typ?raw";
+import splitCompact from "../../../packages/templates/typst/split-compact.typ?raw";
 
 const BASE = import.meta.env.BASE_URL;
 const FONT_FILES = ["NotoSansSC-Regular.otf", "NotoSansSC-Bold.otf", "NotoSerifSC-Bold.otf"];
@@ -38,7 +41,7 @@ export function loadRuntime(): Promise<Runtime> {
     });
     return {
       engine: new LayoutEngine(new TypstSnippetBackend($typst)),
-      templates: createTemplates({ "campus-serif": campusSerif }),
+      templates: createTemplates({ common, "campus-serif": campusSerif, "social-sans": socialSans, "split-compact": splitCompact }),
       charset,
     };
   })();

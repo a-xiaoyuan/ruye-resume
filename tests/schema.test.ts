@@ -35,6 +35,15 @@ test("非法文件给出带路径的错误", () => {
   }
 });
 
+test("主题色：合法值通过，非法值报错，Markdown 往返保留", () => {
+  const doc = load("short");
+  doc.layout.theme = "teal";
+  assert.ok(validateDocument(doc).ok);
+  assert.equal(fromMarkdown(toMarkdown(doc)).doc.layout.theme, "teal");
+  (doc.layout as any).theme = "rainbow";
+  assert.equal(validateDocument(doc).ok, false);
+});
+
 test("同类模块只能有一个", () => {
   const doc = load("short");
   doc.modules.push({ ...doc.modules[0], id: "dup" });

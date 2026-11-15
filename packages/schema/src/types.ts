@@ -3,7 +3,18 @@
 export type PageMode = "standard" | "fit-a4" | "continuous";
 export type TemplateId = "campus-serif" | "social-sans" | "split-compact";
 
+export type ThemeId = "ink" | "teal" | "wine" | "graphite";
+
 export const PAGE_MODES: readonly PageMode[] = ["standard", "fit-a4", "continuous"];
+export const THEME_IDS: readonly ThemeId[] = ["ink", "teal", "wine", "graphite"];
+
+/** 主题色（强调色）。具体色值同时定义在 packages/templates/typst/common.typ，两处需保持一致 */
+export const THEMES: Record<ThemeId, { label: string; accent: string }> = {
+  ink: { label: "墨蓝", accent: "#1f3d63" },
+  teal: { label: "青黛", accent: "#14595a" },
+  wine: { label: "绛红", accent: "#7a2a35" },
+  graphite: { label: "石墨", accent: "#2e3440" },
+};
 export const TEMPLATE_IDS: readonly TemplateId[] = ["campus-serif", "social-sans", "split-compact"];
 
 export interface RuyeDocument {
@@ -16,6 +27,8 @@ export interface RuyeDocument {
   layout: {
     templateId: TemplateId;
     pageMode: PageMode;
+    /** 主题色，缺省为 ink */
+    theme?: ThemeId;
   };
   modules: Module[];
   /** 为以后的功能预留（例如 AI 建议），v1 UI 不使用 */

@@ -1,7 +1,7 @@
 // Markdown 导入/导出（对称格式，见 docs/DESIGN.md §9）。
 // 导入是「尽力而为」：## 为模块，### 为条目，认不出的段落放进最近条目的 bullets。
 
-import { MODULE_LABELS, PAGE_MODES, TEMPLATE_IDS, type Module, type ModuleType, type PageMode, type RuyeDocument, type TemplateId } from "./types.ts";
+import { MODULE_LABELS, PAGE_MODES, TEMPLATE_IDS, THEME_IDS, type Module, type ModuleType, type PageMode, type RuyeDocument, type TemplateId, type ThemeId } from "./types.ts";
 import { normalizeDate, PRESENT } from "./validate.ts";
 
 const SEP = " · ";
@@ -49,7 +49,9 @@ function kv(label: string, value: string | undefined): string[] {
 
 export function toMarkdown(doc: RuyeDocument): string {
   const out: string[] = [];
-  out.push("---", `title: ${doc.meta.title}`, `template: ${doc.layout.templateId}`, `pageMode: ${doc.layout.pageMode}`, "---", "");
+  out.push("---", `title: ${doc.meta.title}`, `template: ${doc.layout.templateId}`, `pageMode: ${doc.layout.pageMode}`);
+  if (doc.layout.theme) out.push(`theme: ${doc.layout.theme}`);
+  out.push("---", "");
 
   for (const m of doc.modules) {
     const hidden = m.visible ? "" : " <!-- hidden -->";
@@ -182,6 +184,7 @@ export function fromMarkdown(src: string): MarkdownImportResult {
   let title = "";
   let templateId: TemplateId = "campus-serif";
   let pageMode: PageMode = "fit-a4";
+  let theme: ThemeId | undefined;
 
   if (lines[0]?.trim() === "---") {
     i = 1;
@@ -191,6 +194,7 @@ export function fromMarkdown(src: string): MarkdownImportResult {
       if (m[1] === "title") title = m[2].trim();
       if (m[1] === "template" && TEMPLATE_IDS.includes(m[2].trim() as TemplateId)) templateId = m[2].trim() as TemplateId;
       if (m[1] === "pageMode" && PAGE_MODES.includes(m[2].trim() as PageMode)) pageMode = m[2].trim() as PageMode;
+      if (m[1] === "theme" && THEME_IDS.includes(m[2].trim() as ThemeId)) theme = m[2].trim() as ThemeId;
     }
     i++;
   }
@@ -364,10 +368,13 @@ export function fromMarkdown(src: string): MarkdownImportResult {
     } else if ((m = line.match(/^[-*+]\s+(.*)$/))) {
       addBullet(m[1].trim());
     } else {
-      const range = item ? parseDateLine(line) : null;
-      if (range && item && current && current.type !== "paper" && current.type !== "award" && !item.start) {
-        item.start = range[0];
-        item.end = range[1];
+      // item / current 在闭包里被赋值，TS 的控制流分析会误判为 never，这里显式标注
+      const it = item as Record<string, unknown> | null;
+      const cur = current as Module | null;
+      const range = it ? parseDateLine(line) : null;
+      if (range && it && cur && cur.type !== "paper" && cur.type !== "award" && !it.start) {
+        it.start = range[0];
+        it.end = range[1];
       } else addBullet(line);
     }
   }
@@ -378,7 +385,7 @@ export function fromMarkdown(src: string): MarkdownImportResult {
   const doc: RuyeDocument = {
     version: 1,
     meta: { title: title || [info.data.name, role].filter(Boolean).join("-") || "简历", locale: "zh-CN", updatedAt: new Date().toISOString() },
-    layout: { templateId, pageMode },
+    layout: theme ? { templateId, pageMode, theme } : { templateId, pageMode },
     modules,
   };
   return { doc, warnings };

@@ -1,0 +1,147 @@
+// 非法日期和损坏存档不得让姓名、学校消失，也不得被示例简历覆盖。
+import { beforeEach, test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { normalizeDate, recoverDocument, validateDocument, type RuyeDocument } from "../packages/schema/src/index.ts";
+import { loadOutcome, openSession, saveCurrent } from "../apps/web/src/storage.ts";
+
+class MemoryStorage {
+  m = new Map<string, string>();
+  getItem(k: string) {
+    return this.m.has(k) ? this.m.get(k)! : null;
+  }
+  setItem(k: string, v: string) {
+    this.m.set(k, String(v));
+  }
+  removeItem(k: string) {
+    this.m.delete(k);
+  }
+}
+
+const memory = new MemoryStorage();
+Object.assign(globalThis, { localStorage: memory });
+
+const sample = (): RuyeDocument => JSON.parse(readFileSync(new URL("../fixtures/short.ruye.json", import.meta.url), "utf8"));
+
+function userDoc(end: string): RuyeDocument {
+  const doc = sample();
+  doc.meta.title = "我的简历-不要丢";
+  const basic = doc.modules[0];
+  if (basic.type === "basic_info") basic.data.name = "张三";
+  const edu = doc.modules.find((m) => m.type === "education");
+  if (edu && edu.type === "education") {
+    edu.data.items[0].school = "用户自己的学校";
+    edu.data.items[0].end = end;
+  }
+  return doc;
+}
+
+function schoolOf(doc: RuyeDocument): string {
+  const edu = doc.modules.find((m) => m.type === "education");
+  return edu && edu.type === "education" ? edu.data.items[0].school : "";
+}
+
+function nameOf(doc: RuyeDocument): string {
+  const basic = doc.modules[0];
+  return basic.type === "basic_info" ? basic.data.name : "";
+}
+
+beforeEach(() => memory.m.clear());
+
+for (const end of ["2024年秋", "2024", "2024.13"]) {
+  test(`非法结束日期「${end}」保存后再读，姓名和学校还在，且不会换成示例`, () => {
+    const doc = userDoc(end);
+    assert.equal(validateDocument(doc).ok, false);
+    assert.equal(saveCurrent(doc), null);
+
+    const loaded = loadOutcome();
+    assert.equal(loaded.kind, "draft");
+    if (loaded.kind !== "draft") return;
+    assert.equal(nameOf(loaded.doc), "张三");
+    assert.equal(schoolOf(loaded.doc), "用户自己的学校");
+    assert.ok(loaded.issues.some((i) => i.path.endsWith(".end")));
+
+    const session = openSession(loaded, sample());
+    assert.equal(session.isSample, false);
+    assert.equal(session.persist, true);
+    assert.equal(nameOf(session.doc), "张三");
+    assert.notEqual(schoolOf(session.doc), "示例理工大学");
+
+    // 模拟刷新后 App 再次自动保存
+    assert.equal(saveCurrent(session.doc, session.storageId ?? undefined), null);
+    const again = loadOutcome();
+    assert.equal(again.kind, "draft");
+    if (again.kind !== "draft") return;
+    assert.equal(nameOf(again.doc), "张三");
+    assert.equal(schoolOf(again.doc), "用户自己的学校");
+    assert.equal(localStorage.getItem("ruye:documents")!.includes("示例理工大学"), false);
+    assert.equal(localStorage.getItem("ruye:documents")!.includes("林知夏"), false);
+  });
+}
+
+test("磁盘上已有的坏档按原样读回，不因校验失败变成 null", () => {
+  const doc = userDoc("明年");
+  localStorage.setItem("ruye:documents", JSON.stringify([{ id: "doc-9", doc }]));
+  localStorage.setItem("ruye:currentId", "doc-9");
+  const loaded = loadOutcome();
+  assert.equal(loaded.kind, "draft");
+  if (loaded.kind !== "draft") return;
+  assert.equal(loaded.id, "doc-9");
+  assert.equal(nameOf(loaded.doc), "张三");
+  assert.equal(schoolOf(loaded.doc), "用户自己的学校");
+  const session = openSession(loaded, sample());
+  assert.equal(session.storageId, "doc-9");
+  assert.notEqual(nameOf(session.doc), "林知夏");
+});
+
+test("合法日期归一后仍能保存并读回", () => {
+  assert.equal(normalizeDate("2024.09"), "2024-09");
+  assert.equal(normalizeDate("2024年9月"), "2024-09");
+  assert.equal(normalizeDate("至今"), "至今");
+  for (const end of ["2024-09", "至今", normalizeDate("2024.09")]) {
+    memory.m.clear();
+    const doc = userDoc(end);
+    assert.equal(validateDocument(doc).ok, true, end);
+    assert.equal(saveCurrent(doc), null);
+    const loaded = loadOutcome();
+    assert.equal(loaded.kind, "draft");
+    if (loaded.kind !== "draft") continue;
+    assert.deepEqual(loaded.issues, []);
+    assert.equal(nameOf(loaded.doc), "张三");
+    assert.equal(schoolOf(loaded.doc), "用户自己的学校");
+    const edu = loaded.doc.modules.find((m) => m.type === "education");
+    if (edu && edu.type === "education") assert.equal(edu.data.items[0].end, end === "至今" ? "至今" : "2024-09");
+  }
+});
+
+test("没有存档时才使用示例", () => {
+  const session = openSession(loadOutcome(), sample());
+  assert.equal(session.isSample, true);
+  assert.equal(session.persist, true);
+  assert.equal(nameOf(session.doc), "林知夏");
+});
+
+test("存档不是合法 JSON 时不覆盖，也不换成示例", () => {
+  localStorage.setItem("ruye:documents", "{这不是json");
+  const loaded = loadOutcome();
+  assert.equal(loaded.kind, "unreadable");
+  const session = openSession(loaded, sample());
+  assert.equal(session.persist, false);
+  assert.equal(session.isSample, false);
+  assert.equal(nameOf(session.doc), "");
+  assert.equal(session.doc.meta.title, "未命名简历");
+  assert.equal(localStorage.getItem("ruye:documents"), "{这不是json");
+  assert.ok(session.rawBackup?.includes("这不是json"));
+});
+
+test("JSON 备份里的非法日期可以再导入，姓名和学校还在", () => {
+  const doc = userDoc("2024年秋");
+  const text = JSON.stringify(doc);
+  const recovered = recoverDocument(JSON.parse(text));
+  assert.ok(recovered);
+  assert.equal(nameOf(recovered!.doc), "张三");
+  assert.equal(schoolOf(recovered!.doc), "用户自己的学校");
+  assert.ok(recovered!.issues.length > 0);
+  assert.equal(recoverDocument("不是对象"), null);
+  assert.equal(recoverDocument({ version: 1 }), null);
+});

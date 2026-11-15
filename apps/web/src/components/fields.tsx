@@ -77,7 +77,11 @@ export function DateField({ label, value, onChange, allowPresent }: { label: str
           aria-invalid={invalid}
           className={invalid ? "invalid" : ""}
           onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => onChange(normalizeDate(draft))}
+          onBlur={(e) => {
+            const next = normalizeDate(e.currentTarget.value);
+            setDraft(next);
+            onChange(next);
+          }}
         />
         {allowPresent && (
           <label className="check">

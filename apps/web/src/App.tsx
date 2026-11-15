@@ -5,6 +5,7 @@ import {
   exportBaseName,
   fromMarkdown,
   MODULE_LABELS,
+  recoverDocument,
   toMarkdown,
   validateDocument,
   type ModuleType,
@@ -14,7 +15,7 @@ import {
 import { A4_HEIGHT_MM, findMissingChars, type PageHeight } from "../../../packages/engine/src/index.ts";
 import { sortByRecommended } from "../../../packages/templates/src/index.ts";
 import { loadRuntime, type Runtime } from "./runtime.ts";
-import { download, loadCurrent, saveCurrent } from "./storage.ts";
+import { download, loadOutcome, openSession, saveCurrent } from "./storage.ts";
 import { addModule, removeModule, syncTitle } from "./doc-ops.ts";
 import { ModuleNav } from "./components/ModuleNav.tsx";
 import { ModuleEditor } from "./components/ModuleEditor.tsx";
@@ -35,6 +36,8 @@ interface Notice {
   level?: "info" | "error";
   /** 删除类操作的撤销点 */
   undo?: RuyeDocument;
+  /** 不自动消失：恢复说明和存档损坏必须留在屏幕上 */
+  sticky?: boolean;
 }
 
 interface MenuItem {
@@ -105,15 +108,18 @@ function Menu({ label, items, onPick, right }: { label: string; items: MenuItem[
 }
 
 export function App() {
-  const stored = useMemo(() => loadCurrent(), []);
-  const [doc, setDoc] = useState<RuyeDocument>(() => stored ?? structuredClone(SAMPLES.short));
-  const [isSample, setIsSample] = useState(!stored);
-  const [activeId, setActiveId] = useState<string | null>(() => (stored ?? SAMPLES.short).modules[0]?.id ?? null);
+  const opened = useMemo(() => openSession(loadOutcome(), structuredClone(SAMPLES.short)), []);
+  const [doc, setDoc] = useState<RuyeDocument>(opened.doc);
+  const [isSample, setIsSample] = useState(opened.isSample);
+  const [persist, setPersist] = useState(opened.persist);
+  const storageId = opened.storageId;
+  const [rawBackup, setRawBackup] = useState<string | null>(opened.rawBackup);
+  const [activeId, setActiveId] = useState<string | null>(() => opened.doc.modules[0]?.id ?? null);
   const [runtime, setRuntime] = useState<Runtime | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewData | null>(null);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<Notice | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(opened.notice ? { text: opened.notice, level: "error", sticky: true } : null);
   const [overflowDialog, setOverflowDialog] = useState(false);
   const [zoom, setZoom] = useState(1);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -131,6 +137,7 @@ export function App() {
     update(next);
   };
   const replaceAll = (next: RuyeDocument) => {
+    setPersist(true);
     setDoc(next);
     setActiveId(next.modules[0]?.id ?? null);
     setIsSample(false);
@@ -147,16 +154,17 @@ export function App() {
     return () => clearTimeout(t);
   }, [isSample]);
   useEffect(() => {
-    if (!notice || notice.level === "error" || notice.undo) return;
+    if (!notice || notice.level === "error" || notice.undo || notice.sticky) return;
     const t = setTimeout(() => setNotice(null), 6000);
     return () => clearTimeout(t);
   }, [notice]);
 
-  // 本地自动保存
+  // 本地自动保存。读档失败时 persist 为 false，避免用空白或示例盖掉原始数据
   useEffect(() => {
-    const err = saveCurrent(doc);
-    if (err) setNotice({ text: err, level: "error" });
-  }, [doc]);
+    if (!persist) return;
+    const err = saveCurrent(doc, storageId ?? undefined);
+    if (err) setNotice({ text: err, level: "error", sticky: true });
+  }, [doc, persist, storageId]);
 
   // 300ms 防抖后重新排版。预览和导出用同一个引擎、同一套 token 与页高
   useEffect(() => {
@@ -215,12 +223,18 @@ export function App() {
     const text = await file.text();
     if (file.name.endsWith(".json")) {
       try {
-        const v = validateDocument(JSON.parse(text));
-        if (!v.ok) return setNotice({ text: `导入失败：${v.issues.slice(0, 3).map((i) => `${i.path} ${i.message}`).join("；")}`, level: "error" });
-        replaceAll(v.doc);
-        setNotice({ text: `已导入「${v.doc.meta.title}」。` });
+        const recovered = recoverDocument(JSON.parse(text));
+        if (!recovered) return setNotice({ text: "导入失败：这份 JSON 不是可恢复的如页简历，当前内容没有被替换。", level: "error", sticky: true });
+        replaceAll(recovered.doc);
+        setRawBackup(null);
+        if (recovered.issues.length > 0) {
+          const detail = recovered.issues.slice(0, 3).map((i) => `${i.path} ${i.message}`).join("；");
+          setNotice({ text: `已导入，姓名和正文都保留着。有 ${recovered.issues.length} 处格式问题：${detail}`, level: "error", sticky: true });
+        } else {
+          setNotice({ text: `已导入「${recovered.doc.meta.title}」。` });
+        }
       } catch (e) {
-        setNotice({ text: `导入失败：不是合法的 JSON（${(e as Error).message}）`, level: "error" });
+        setNotice({ text: `导入失败：不是合法的 JSON（${(e as Error).message}）。当前内容没有被替换。`, level: "error", sticky: true });
       }
     } else {
       const { doc: parsed, warnings } = fromMarkdown(text);
@@ -247,8 +261,15 @@ export function App() {
   }
 
   function onExportMenu(key: string) {
-    if (key === "json") download(`${exportBaseName(doc)}.ruye.json`, JSON.stringify(doc, null, 2), "application/json");
-    else if (key === "md") download(`${exportBaseName(doc)}.md`, toMarkdown(doc), "text/markdown");
+    if (key === "json") {
+      download(`${exportBaseName(doc)}.ruye.json`, JSON.stringify(doc, null, 2), "application/json");
+      if (issues.length > 0) {
+        setNotice({
+          text: `已导出 JSON。里面有 ${issues.length} 处格式问题，用「导入」可以原样打开并继续改，不会因为格式问题整份拒绝。`,
+          sticky: true,
+        });
+      }
+    } else if (key === "md") download(`${exportBaseName(doc)}.md`, toMarkdown(doc), "text/markdown");
   }
 
   return (
@@ -264,9 +285,9 @@ export function App() {
 
         <div className="doc-meta" title="标题由姓名与求职意向自动生成">
           <span className="doc-title">{doc.meta.title}</span>
-          <span className="save-state">
+          <span className={`save-state${!persist ? " blocked" : issues.length > 0 ? " warn" : ""}`}>
             <i aria-hidden="true" />
-            仅保存在此浏览器
+            {!persist ? "未写入，以免覆盖无法读取的存档" : issues.length > 0 ? `草稿已保留（${issues.length} 处格式需修正）` : "仅保存在此浏览器"}
           </span>
         </div>
 
@@ -317,6 +338,11 @@ export function App() {
           <div className={`toast ${notice.level ?? "info"}`} role={notice.level === "error" ? "alert" : "status"}>
             <span>{notice.text}</span>
             <span className="toast-actions">
+              {rawBackup && (
+                <button type="button" onClick={() => download("ruye-storage-raw.txt", rawBackup, "text/plain")}>
+                  下载原始存档
+                </button>
+              )}
               {notice.undo && (
                 <button
                   onClick={() => {

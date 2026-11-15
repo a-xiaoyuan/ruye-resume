@@ -258,6 +258,27 @@ export function validateDocument(input: unknown): ValidationResult {
   return { ok: true, doc: input as unknown as RuyeDocument };
 }
 
+/**
+ * 字段不合法时仍尽量拿回文档，供编辑器修正。结构残缺到界面无法展示时返回 null。
+ * 合法文档 issues 为空。
+ */
+export function recoverDocument(input: unknown): { doc: RuyeDocument; issues: ValidationIssue[] } | null {
+  const result = validateDocument(input);
+  if (result.ok) return { doc: result.doc, issues: [] };
+  if (!isRecoverableDraft(input)) return null;
+  return { doc: input, issues: result.issues };
+}
+
+function isRecoverableDraft(input: unknown): input is RuyeDocument {
+  if (!isObj(input)) return false;
+  if (!isObj(input.meta) || typeof input.meta.title !== "string") return false;
+  if (!isObj(input.layout)) return false;
+  if (!Array.isArray(input.modules)) return false;
+  return input.modules.every(
+    (m) => isObj(m) && typeof m.id === "string" && m.id !== "" && MODULE_TYPES.includes(m.type as ModuleType) && isObj(m.data),
+  );
+}
+
 const nonEmpty = (s: string | undefined): boolean => s !== undefined && s.trim() !== "";
 
 /** 模块是否「内容全空」：全空的模块不渲染，也不参与高度计算 */

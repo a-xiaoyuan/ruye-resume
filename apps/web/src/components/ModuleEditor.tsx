@@ -4,6 +4,19 @@ import { MODULE_LABELS, newId, type Module, type RuyeDocument, type SkillCategor
 import { addItem, itemTitle, moveItem, removeItem, replaceModule, updateItem, type ListItem, type ListModule } from "../doc-ops.ts";
 import { BulletList, DateField, PhotoField, TagInput, TextArea, TextField } from "./fields.tsx";
 
+const MODULE_HINTS: Record<string, string> = {
+  basic_info: "姓名 + 求职意向会拼成文档标题。照片只在本机处理，不会上传。",
+  job_intention: "岗位与城市写具体；期望薪资一般不建议写。",
+  skills: "按类别列出，如「语言」「框架」「中间件」，每类回车添加一项。",
+  education: "校招建议把教育放在前面；亮点写 GPA、专业排名、奖学金。",
+  work: "每条要点尽量是「动作 + 技术 + 可量化结果」。",
+  internship: "实习经历按时间倒序；技术栈用标签，回车添加。",
+  project: "突出你负责的部分和结果，链接放可访问的仓库或演示地址。",
+  research: "写清课题、你的分工与产出。",
+  paper: "期刊 / 会议与日期尽量写全。",
+  award: "只放与目标岗位相关、有区分度的奖项。",
+};
+
 interface Props {
   doc: RuyeDocument;
   module: Module;
@@ -26,6 +39,7 @@ export function ModuleEditor({ doc, module: m, onChange, onRemove, onError, onRe
           删除模块
         </button>
       </div>
+      {MODULE_HINTS[m.type] && <p className="editor-sub">{MODULE_HINTS[m.type]}</p>}
 
       {m.type === "basic_info" && (
         <div className="form-grid">

@@ -19,7 +19,9 @@ export function ModuleNav({ doc, activeId, onSelect, onChange, onAdd, onSortReco
 
   return (
     <nav className="module-nav" aria-label="简历模块">
-      <div className="pane-title">模块</div>
+      <div className="panel-caption">
+        模块<span>{doc.modules.length} 个</span>
+      </div>
       <ul>
         {doc.modules.map((m, i) => (
           <li
@@ -50,8 +52,13 @@ export function ModuleNav({ doc, activeId, onSelect, onChange, onAdd, onSortReco
               ⋮⋮
             </span>
             <button type="button" className="module-btn" aria-current={m.id === activeId} onClick={() => onSelect(m.id)}>
-              <span className="module-name">{MODULE_LABELS[m.type]}</span>
-              <span className="module-sub">{moduleSummary(m)}</span>
+              <span className="module-icon" aria-hidden="true">
+                {MODULE_LABELS[m.type][0]}
+              </span>
+              <span className="module-text">
+                <span className="module-name">{MODULE_LABELS[m.type]}</span>
+                <span className="module-sub">{moduleSummary(m)}</span>
+              </span>
             </button>
             <div className="nav-actions">
               <button type="button" aria-label={`上移${MODULE_LABELS[m.type]}`} disabled={i === 0} onClick={() => onChange(moveModule(doc, m.id, -1))}>

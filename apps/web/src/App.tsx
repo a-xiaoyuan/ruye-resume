@@ -5,23 +5,21 @@ import {
   exportBaseName,
   fromMarkdown,
   MODULE_LABELS,
-  THEMES,
-  THEME_IDS,
   toMarkdown,
   validateDocument,
   type ModuleType,
   type PageMode,
   type RuyeDocument,
-  type TemplateId,
 } from "../../../packages/schema/src/index.ts";
-import { A4_HEIGHT_MM, describeFit, findMissingChars, type PageHeight } from "../../../packages/engine/src/index.ts";
-import { sortByRecommended, TEMPLATE_META } from "../../../packages/templates/src/index.ts";
+import { A4_HEIGHT_MM, findMissingChars, type PageHeight } from "../../../packages/engine/src/index.ts";
+import { sortByRecommended } from "../../../packages/templates/src/index.ts";
 import { loadRuntime, type Runtime } from "./runtime.ts";
 import { download, loadCurrent, saveCurrent } from "./storage.ts";
 import { addModule, removeModule, syncTitle } from "./doc-ops.ts";
 import { ModuleNav } from "./components/ModuleNav.tsx";
 import { ModuleEditor } from "./components/ModuleEditor.tsx";
 import { Preview, type PreviewData } from "./components/Preview.tsx";
+import { StylePanel } from "./components/StylePanel.tsx";
 import shortSample from "../../../fixtures/short.ruye.json";
 import mediumSample from "../../../fixtures/medium.ruye.json";
 import longSample from "../../../fixtures/long.ruye.json";
@@ -32,17 +30,78 @@ const SAMPLES: Record<string, RuyeDocument> = {
   long: longSample as RuyeDocument,
 };
 
-const MODE_LABELS: Record<PageMode, string> = {
-  standard: "标准分页",
-  "fit-a4": "A4 智能一页",
-  continuous: "无损长一页",
-};
-
 interface Notice {
   text: string;
   level?: "info" | "error";
   /** 删除类操作的撤销点 */
   undo?: RuyeDocument;
+}
+
+interface MenuItem {
+  key: string;
+  label: string;
+  hint?: string;
+}
+
+function Logo() {
+  return (
+    <svg width="30" height="30" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+      <rect x="5" y="3" width="22" height="26" rx="4" fill="#3b5bdb" />
+      <path d="M19 3h8v8z" fill="#93a5f2" />
+      <rect x="10" y="12" width="12" height="2" rx="1" fill="#fff" />
+      <rect x="10" y="17" width="9" height="2" rx="1" fill="#fff" opacity=".8" />
+      <rect x="10" y="22" width="11" height="2" rx="1" fill="#fff" opacity=".55" />
+    </svg>
+  );
+}
+
+function Menu({ label, items, onPick, right }: { label: string; items: MenuItem[]; onPick: (key: string) => void; right?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+
+  return (
+    <div className="menu" ref={ref}>
+      <button type="button" className="menu-trigger" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((v) => !v)}>
+        {label}
+        <span className="caret" aria-hidden="true">
+          ▾
+        </span>
+      </button>
+      {open && (
+        <div className={`menu-list${right ? " right" : ""}`} role="menu">
+          {items.map((it) => (
+            <button
+              key={it.key}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onPick(it.key);
+              }}
+            >
+              <span>{it.label}</span>
+              {it.hint && <em>{it.hint}</em>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function App() {
@@ -56,6 +115,7 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [overflowDialog, setOverflowDialog] = useState(false);
+  const [zoom, setZoom] = useState(1);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const issues = useMemo(() => {
@@ -79,6 +139,18 @@ export function App() {
   useEffect(() => {
     loadRuntime().then(setRuntime, (e: Error) => setFatal(e.message));
   }, []);
+
+  // 提示自动消退：示例引导 9 秒，普通通知 6 秒；错误与可撤销通知常驻，由用户关闭
+  useEffect(() => {
+    if (!isSample) return;
+    const t = setTimeout(() => setIsSample(false), 9000);
+    return () => clearTimeout(t);
+  }, [isSample]);
+  useEffect(() => {
+    if (!notice || notice.level === "error" || notice.undo) return;
+    const t = setTimeout(() => setNotice(null), 6000);
+    return () => clearTimeout(t);
+  }, [notice]);
 
   // 本地自动保存
   useEffect(() => {
@@ -165,122 +237,116 @@ export function App() {
     setActiveId(r.id);
   }
 
-  const status = preview && describeFit(preview.result);
+  function onFileMenu(key: string) {
+    if (key === "import") fileInput.current?.click();
+    else if (key === "new" && confirm("新建空白简历会替换当前内容（可先导出备份）。继续？")) replaceAll(createEmptyDocument());
+    else if (key.startsWith("sample:") && confirm("载入示例会替换当前内容（可先导出备份）。继续？")) {
+      replaceAll(structuredClone(SAMPLES[key.slice(7)]));
+      setIsSample(true);
+    }
+  }
+
+  function onExportMenu(key: string) {
+    if (key === "json") download(`${exportBaseName(doc)}.ruye.json`, JSON.stringify(doc, null, 2), "application/json");
+    else if (key === "md") download(`${exportBaseName(doc)}.md`, toMarkdown(doc), "text/markdown");
+  }
 
   return (
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          如页 <span>Ruye</span>
+          <Logo />
+          <span className="brand-name">
+            如页<em>Ruye</em>
+          </span>
+          <span className="version">v0.1</span>
         </div>
-        <label className="field">
-          模板
-          <select value={doc.layout.templateId} onChange={(e) => update({ ...doc, layout: { ...doc.layout, templateId: e.target.value as TemplateId } })}>
-            {TEMPLATE_META.map((t) => (
-              <option key={t.id} value={t.id} title={t.description}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="swatches" role="radiogroup" aria-label="主题色">
-          {THEME_IDS.map((id) => (
-            <button
-              key={id}
-              role="radio"
-              aria-checked={(doc.layout.theme ?? "ink") === id}
-              aria-label={THEMES[id].label}
-              title={THEMES[id].label}
-              style={{ background: THEMES[id].accent }}
-              onClick={() => update({ ...doc, layout: { ...doc.layout, theme: id } })}
-            />
-          ))}
+
+        <div className="doc-meta" title="标题由姓名与求职意向自动生成">
+          <span className="doc-title">{doc.meta.title}</span>
+          <span className="save-state">
+            <i aria-hidden="true" />
+            仅保存在此浏览器
+          </span>
         </div>
-        <div className="modes" role="radiogroup" aria-label="页面模式">
-          {(Object.keys(MODE_LABELS) as PageMode[]).map((m) => (
-            <button key={m} role="radio" aria-checked={mode === m} className={mode === m ? "on" : ""} onClick={() => update({ ...doc, layout: { ...doc.layout, pageMode: m } })}>
-              {MODE_LABELS[m]}
-            </button>
-          ))}
-        </div>
-        <div className={`status ${status?.level ?? ""}`} aria-live="polite">
-          {fatal ? "排版引擎加载失败" : !runtime ? "正在加载排版引擎…" : busy && !preview ? "排版中…" : status?.text}
-        </div>
+
         <div className="actions">
-          <select
-            aria-label="文件"
-            value=""
-            onChange={(e) => {
-              const v = e.target.value;
-              e.target.value = "";
-              if (v === "import") fileInput.current?.click();
-              else if (v === "json") download(`${exportBaseName(doc)}.ruye.json`, JSON.stringify(doc, null, 2), "application/json");
-              else if (v === "md") download(`${exportBaseName(doc)}.md`, toMarkdown(doc), "text/markdown");
-              else if (v === "new" && confirm("新建空白简历会替换当前内容（可先导出备份）。继续？")) replaceAll(createEmptyDocument());
-              else if (v.startsWith("sample:") && confirm("载入示例会替换当前内容（可先导出备份）。继续？")) {
-                replaceAll(structuredClone(SAMPLES[v.slice(7)]));
-                setIsSample(true);
-              }
-            }}
-          >
-            <option value="">文件…</option>
-            <option value="import">导入 .ruye.json / .md</option>
-            <option value="json">导出 .ruye.json</option>
-            <option value="md">导出 Markdown</option>
-            <option value="new">新建空白简历</option>
-            <option value="sample:short">载入示例：短</option>
-            <option value="sample:medium">载入示例：中</option>
-            <option value="sample:long">载入示例：长</option>
-          </select>
+          <Menu
+            label="文件"
+            onPick={onFileMenu}
+            items={[
+              { key: "import", label: "导入简历", hint: ".ruye.json / .md" },
+              { key: "new", label: "新建空白简历" },
+              { key: "sample:short", label: "载入示例", hint: "短" },
+              { key: "sample:medium", label: "载入示例", hint: "中" },
+              { key: "sample:long", label: "载入示例", hint: "长" },
+            ]}
+          />
+          <Menu
+            label="导出"
+            onPick={onExportMenu}
+            items={[
+              { key: "json", label: "导出 .ruye.json", hint: "可再次导入" },
+              { key: "md", label: "导出 Markdown", hint: "可版本管理" },
+            ]}
+          />
           <input ref={fileInput} type="file" accept=".json,.md,.txt" hidden onChange={(e) => (e.target.files?.[0] && importFile(e.target.files[0]), (e.target.value = ""))} />
           <button className="primary" disabled={!runtime || busy} onClick={() => exportPdf()}>
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M8 2v8m0 0L5 7m3 3 3-3M3 12.5h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
             下载 PDF
           </button>
         </div>
       </header>
 
-      {isSample && (
-        <div className="notice info">
-          这是虚构的示例简历，请替换成你自己的内容。
-          <span className="notice-actions">
-            <button onClick={() => replaceAll(createEmptyDocument())}>从空白开始</button>
-            <button onClick={() => fileInput.current?.click()}>导入文件</button>
-            <button aria-label="关闭提示" onClick={() => setIsSample(false)}>
-              ×
-            </button>
-          </span>
-        </div>
-      )}
-      {notice && (
-        <div className={`notice ${notice.level ?? "info"}`} role={notice.level === "error" ? "alert" : "status"}>
-          {notice.text}
-          <span className="notice-actions">
-            {notice.undo && (
-              <button
-                onClick={() => {
-                  setDoc(notice.undo!);
-                  setNotice(null);
-                }}
-              >
-                撤销
+      <div className="toasts">
+        {isSample && (
+          <div className="toast info">
+            <span>这是虚构的示例简历，换成你自己的内容就能直接导出。</span>
+            <span className="toast-actions">
+              <button onClick={() => replaceAll(createEmptyDocument())}>从空白开始</button>
+              <button onClick={() => fileInput.current?.click()}>导入文件</button>
+              <button aria-label="关闭提示" onClick={() => setIsSample(false)}>
+                ×
               </button>
-            )}
-            <button aria-label="关闭提示" onClick={() => setNotice(null)}>
-              ×
-            </button>
-          </span>
-        </div>
-      )}
+            </span>
+          </div>
+        )}
+        {notice && (
+          <div className={`toast ${notice.level ?? "info"}`} role={notice.level === "error" ? "alert" : "status"}>
+            <span>{notice.text}</span>
+            <span className="toast-actions">
+              {notice.undo && (
+                <button
+                  onClick={() => {
+                    setDoc(notice.undo!);
+                    setNotice(null);
+                  }}
+                >
+                  撤销
+                </button>
+              )}
+              <button aria-label="关闭提示" onClick={() => setNotice(null)}>
+                ×
+              </button>
+            </span>
+          </div>
+        )}
+      </div>
 
       <main className="panes">
-        <ModuleNav
-          doc={doc}
-          activeId={activeId}
-          onSelect={setActiveId}
-          onChange={update}
-          onAdd={addNewModule}
-          onSortRecommended={() => update(sortByRecommended(doc, doc.layout.templateId))}
-        />
+        <aside className="sidebar">
+          <StylePanel doc={doc} onChange={update} />
+          <ModuleNav
+            doc={doc}
+            activeId={activeId}
+            onSelect={setActiveId}
+            onChange={update}
+            onAdd={addNewModule}
+            onSortRecommended={() => update(sortByRecommended(doc, doc.layout.templateId))}
+          />
+        </aside>
 
         <section className="editor" aria-label="编辑">
           {active ? (
@@ -296,7 +362,13 @@ export function App() {
               }}
             />
           ) : (
-            <div className="empty">从左侧选择一个模块开始编辑。</div>
+            <div className="empty">
+              <div className="empty-icon" aria-hidden="true">
+                ✎
+              </div>
+              <p>从左侧挑一个模块开始写。</p>
+              <span>模块可拖拽排序，开关控制是否出现在简历里。</span>
+            </div>
           )}
           {issues.length > 0 && (
             <ul className="problems" aria-label="需要修正的内容">
@@ -310,7 +382,7 @@ export function App() {
         </section>
 
         <section className="preview" aria-label="A4 预览">
-          <Preview data={preview} error={fatal} />
+          <Preview data={preview} error={fatal} busy={busy} zoom={zoom} onZoom={setZoom} />
         </section>
       </main>
 

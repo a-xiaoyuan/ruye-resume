@@ -210,6 +210,21 @@ export function saveSyncState(userId: number, s: SyncState): void {
   }
 }
 
+/** 被标记为「仅本机」（云端已删除、本机保留）的简历 id */
+export function detachedIds(state: SyncState): string[] {
+  return Object.entries(state).filter(([, r]) => r.detached).map(([id]) => id);
+}
+
+/**
+ * 重新开启同步：把这些简历当作「本机改过、云端版本未知」，下次同步时重新上传
+ * （云端已删除的会被恢复，云端不存在的会新建）
+ */
+export function reattach(state: SyncState, ids: string[]): SyncState {
+  const next = { ...state };
+  for (const id of ids) next[id] = { version: next[id]?.version ?? 0, hash: "" };
+  return next;
+}
+
 /** 同步结果的一句话说明 */
 export function describeReport(r: SyncReport): string {
   const parts: string[] = [];

@@ -193,6 +193,28 @@
 // 照片：3:4 证件照比例，超出部分裁切
 #let photo-box(width) = box(width: width, height: width * 4 / 3, clip: true, radius: 1.2mm, stroke: 0.5pt + hairline, image(photo-path, width: 100%, height: 100%, fit: "cover"))
 
+// 居中页眉：若干行居中排列，照片（如有）固定在右上角。
+// 文字区左右各让出照片宽度，保证整页居中且不压照片；照片比文字高时用照片高度撑开。
+// 「经典」「雅致」两套模板共用。first-gap / rest-gap：第一行与第二行、其余各行之间的额外间距
+#let centered-header(lines, photo-w: 21mm, first-gap: 2.4mm, rest-gap: 1.2mm) = {
+  let side = if photo-path != none { photo-w + 4mm } else { 0mm }
+  let body = pad(left: side, right: side, align(center, {
+    set par(justify: false)
+    for (i, l) in lines.enumerate() {
+      if i > 0 { v(lead + if i == 1 { first-gap } else { rest-gap }) }
+      block(l)
+    }
+  }))
+  block(breakable: false, width: 100%, {
+    if photo-path != none { place(top + right, photo-box(photo-w)) }
+    context {
+      let h = measure(body, width: text-width).height
+      body
+      if photo-path != none and h < photo-w * 4 / 3 { v(photo-w * 4 / 3 - h) }
+    }
+  })
+}
+
 // ---------------------------------------------------------------- 正文元素
 
 // 量化成果加粗：带单位的数字（320ms、85%、3 天、20 万）或两位以上整数（600、1500）。
@@ -395,14 +417,15 @@
 // 否则把句首的熟练度词（精通、熟悉、了解……）用强调色加粗，扫一眼就能看出深浅
 #let note-key-re = lead-key-re
 #let proficiency-re = regex("^(精通|熟练掌握|熟练使用|熟练|熟悉|掌握|理解|了解|擅长|具备|能够)")
+// 句首是熟练度词时优先按熟练度处理：「熟悉检索增强生成的完整链路：切分、召回……」不该整段加粗
 #let skill-note(s) = {
-  let key = s.match(note-key-re)
-  if key != none {
-    return bullet-of({ text(weight: "bold")[#key.captures.at(0)]; [：]; emphasize(s.slice(key.end)) })
-  }
   let level = s.match(proficiency-re)
   if level != none {
     return bullet-of({ text(weight: "bold", fill: accent)[#level.text]; emphasize(s.slice(level.end)) })
+  }
+  let key = s.match(note-key-re)
+  if key != none and key.end < s.len() {
+    return bullet-of({ text(weight: "bold")[#key.captures.at(0)]; [：]; emphasize(s.slice(key.end)) })
   }
   bullet(s)
 }

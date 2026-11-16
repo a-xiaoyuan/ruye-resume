@@ -549,3 +549,19 @@ input.invalid { border-color: var(--err) !important; }
 .login-dialog .dialog-error { margin: 0; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--err-bg); color: var(--err); font-size: 12.5px; }
 .login-dialog .dialog-actions { flex-direction: row-reverse; }
 .login-dialog .dialog-actions button { flex: 1; }
+.login-dialog .dialog-ok { margin: 0; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--ok-bg); color: var(--ok); font-size: 12.5px; line-height: 1.6; }
+.login-dialog .link-btn { align-self: center; padding: 0; }
+.account-detached { margin: 0 6px 8px; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--warn-bg); color: var(--warn); font-size: 12px; line-height: 1.6; }
+.account-detached button { display: block; margin-top: 4px; padding: 0; border: 0; background: none; color: var(--brand); font-size: 12px; }
+.menu-list button.danger { color: var(--err); }
+button.primary.danger-fill { background: var(--err); border-color: var(--err); }
+
+/* ---------------- 写作建议 ---------------- */
+.writing-tips { margin: 0 0 18px; border: 1px solid #e6e1f5; background: #f8f6fe; border-radius: var(--radius-sm); }
+.writing-tips.warn { border-color: #f0dcb4; background: var(--warn-bg); }
+.writing-tips-head { width: 100%; display: flex; justify-content: space-between; border: 0; background: none; padding: 9px 12px; font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.writing-tips-head span { font-weight: 400; color: var(--faint); font-size: 12px; }
+.writing-tips ul { margin: 0; padding: 0 14px 10px 30px; font-size: 12.5px; line-height: 1.7; color: var(--muted); }
+.writing-tips b { color: var(--ink); font-weight: 600; }
+.menu-section { padding: 8px 12px 3px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; color: var(--faint); }
+.menu-list [role="none"]:not(:first-child) .menu-section { margin-top: 4px; border-top: 1px solid var(--line); padding-top: 9px; }

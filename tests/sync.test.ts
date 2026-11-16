@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import type { RuyeDocument } from "../packages/schema/src/index.ts";
 import { CloudError, type CloudApi, type RemoteSummary } from "../apps/web/src/cloud.ts";
-import { contentHash, planSync, runSync, type LocalStore, type SyncState } from "../apps/web/src/sync.ts";
+import { contentHash, detachedIds, planSync, reattach, runSync, type LocalStore, type SyncState } from "../apps/web/src/sync.ts";
 
 const load = (name: string): RuyeDocument => JSON.parse(readFileSync(new URL(`../fixtures/${name}.ruye.json`, import.meta.url), "utf8"));
 const rs = (id: string, version: number, deleted = false): RemoteSummary => ({ id, title: id, alias: null, version, updatedAt: 0, deleted });
@@ -182,4 +182,18 @@ test("登录失效（401）向上抛出；其他错误记入报告、不中断�
   assert.equal(r.report.pushed, 1);
   const expired: CloudApi = { ...cloud.api, list: async () => Promise.reject(new CloudError("expired", 401, "unauthorized")) };
   await assert.rejects(runSync(expired, a.store, {}), (e: unknown) => e instanceof CloudError && e.status === 401);
+});
+
+test("重新开启同步：仅本机的简历重新上传，云端恢复", async () => {
+  const cloud = fakeCloud();
+  const a = memStore({ "doc-1": load("full") });
+  let sa = (await runSync(cloud.api, a.store, {})).state;
+  await cloud.api.remove("doc-1", 1);
+  sa = (await runSync(cloud.api, a.store, sa)).state;
+  assert.deepEqual(detachedIds(sa), ["doc-1"]);
+  sa = reattach(sa, detachedIds(sa));
+  const r = await runSync(cloud.api, a.store, sa);
+  assert.equal(r.report.pushed, 1);
+  assert.equal(cloud.docs.get("doc-1")!.deleted, false);
+  assert.deepEqual(detachedIds(r.state), []);
 });

@@ -1,0 +1,144 @@
+{
+  "version": 1,
+  "meta": {
+    "title": "许知微-产品经理（示例，请替换）",
+    "locale": "zh-CN",
+    "updatedAt": "2026-11-15T00:00:00.000Z"
+  },
+  "layout": {
+    "templateId": "timeline",
+    "pageMode": "fit-a4"
+  },
+  "modules": [
+    {
+      "id": "m-basic",
+      "type": "basic_info",
+      "visible": true,
+      "data": {
+        "name": "许知微",
+        "phone": "13900000000",
+        "email": "zhiwei.xu@example.com",
+        "location": "北京"
+      }
+    },
+    {
+      "id": "m-intent",
+      "type": "job_intention",
+      "visible": true,
+      "data": {
+        "role": "产品经理（B 端 / SaaS）",
+        "city": "北京",
+        "availability": "2027 届校招，可提前实习"
+      }
+    },
+    {
+      "id": "m-intern",
+      "type": "internship",
+      "visible": true,
+      "data": {
+        "items": [
+          {
+            "id": "exp-1",
+            "org": "示例企业服务公司",
+            "title": "产品经理实习生",
+            "start": "2026-06",
+            "end": "2026-09",
+            "summary": "负责协同办公产品的审批模块",
+            "techStack": [
+              "用户访谈",
+              "Axure",
+              "SQL"
+            ],
+            "bullets": [
+              "需求调研：访谈 12 家客户的行政与财务人员，归纳出审批流配置难、催办靠人工两个核心问题",
+              "方案设计：设计审批流模板与自动催办规则，输出 PRD 与原型，推动研发两周上线",
+              "效果：新客户审批流配置时间从平均 40 分钟降到 10 分钟，审批平均时长缩短 35%"
+            ]
+          },
+          {
+            "id": "exp-2",
+            "org": "示例内容社区",
+            "title": "产品运营实习生",
+            "start": "2025-12",
+            "end": "2026-03",
+            "summary": "负责新用户留存",
+            "techStack": [
+              "数据分析",
+              "A/B 测试"
+            ],
+            "bullets": [
+              "通过漏斗分析发现新用户在兴趣选择页流失最多，推动简化为一步选择",
+              "设计并跟进 3 组 A/B 实验，新用户次日留存提升 4.2 个百分点"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "m-proj",
+      "type": "project",
+      "visible": true,
+      "data": {
+        "items": [
+          {
+            "id": "proj-1",
+            "name": "校园二手交易平台",
+            "role": "产品负责人",
+            "start": "2025-03",
+            "end": "2025-06",
+            "summary": "五人团队课程项目，上线一学期累计注册 1800 人",
+            "techStack": [
+              "Figma",
+              "问卷调研"
+            ],
+            "bullets": [
+              "通过 200 份问卷确定「担保交易」与「宿舍楼自提」两个差异化功能",
+              "制定版本节奏与验收标准，按两周一个版本完成 4 次迭代"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "m-edu",
+      "type": "education",
+      "visible": true,
+      "data": {
+        "items": [
+          {
+            "id": "edu-1",
+            "school": "示例财经大学",
+            "major": "信息管理与信息系统",
+            "degree": "本科",
+            "start": "2023-09",
+            "end": "2027-06",
+            "highlights": [
+              "GPA 3.7 / 4.0；辅修心理学"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "m-skills",
+      "type": "skills",
+      "visible": true,
+      "data": {
+        "categories": [],
+        "notes": [
+          "熟悉需求调研、PRD 撰写与原型设计，能把模糊需求拆成可验收的功能点",
+          "能使用 SQL 与 Excel 做数据分析，熟悉漏斗、留存与 A/B 测试的分析方法",
+          "了解前后端基本原理，能和研发讨论技术方案与排期"
+        ]
+      }
+    },
+    {
+      "id": "m-summary",
+      "type": "summary",
+      "visible": true,
+      "data": {
+        "text": "相信好的需求来自现场：做方案前会先去看用户怎么用，上线后跟踪数据并复盘。"
+      }
+    }
+  ]
+}

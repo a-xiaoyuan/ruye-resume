@@ -1,0 +1,155 @@
+{
+  "version": 1,
+  "meta": {
+    "title": "顾远舟-Go后端开发（示例，请替换）",
+    "locale": "zh-CN",
+    "updatedAt": "2026-11-15T00:00:00.000Z"
+  },
+  "layout": {
+    "templateId": "social-sans",
+    "pageMode": "fit-a4"
+  },
+  "modules": [
+    {
+      "id": "m-basic",
+      "type": "basic_info",
+      "visible": true,
+      "data": {
+        "name": "顾远舟",
+        "phone": "13900000000",
+        "email": "yuanzhou.gu@example.com",
+        "location": "上海",
+        "github": "https://github.com/example"
+      }
+    },
+    {
+      "id": "m-intent",
+      "type": "job_intention",
+      "visible": true,
+      "data": {
+        "role": "Go 后端开发工程师",
+        "city": "上海 / 杭州",
+        "availability": "一个月内到岗"
+      }
+    },
+    {
+      "id": "m-skills",
+      "type": "skills",
+      "visible": true,
+      "data": {
+        "categories": [],
+        "notes": [
+          "熟悉 Go 语言与并发模型，理解 GMP 调度、channel 与 context 的使用场景，能用 pprof 定位 CPU 与内存热点",
+          "熟悉 gRPC 与 Protobuf，有服务拆分、接口版本管理和超时重试设计经验",
+          "熟悉 MySQL 与 Redis，能设计分库分表方案，处理过缓存一致性与热点 key 问题",
+          "了解 Kafka、etcd 与 Kubernetes，能独立完成服务的容器化部署与灰度发布"
+        ]
+      }
+    },
+    {
+      "id": "m-work",
+      "type": "work",
+      "visible": true,
+      "data": {
+        "items": [
+          {
+            "id": "exp-1",
+            "org": "示例云商科技有限公司",
+            "title": "Go 后端开发工程师",
+            "start": "2023-07",
+            "end": "至今",
+            "summary": "负责交易中台的订单与库存服务，日均订单约 40 万",
+            "techStack": [
+              "Go",
+              "gRPC",
+              "MySQL",
+              "Redis",
+              "Kafka"
+            ],
+            "bullets": [
+              "个人职责：",
+              "负责库存服务从 PHP 单体迁移到 Go 微服务，设计扣减、回补、对账三类接口",
+              "维护订单状态机，处理超时关单、部分退款等异常流转",
+              "工作成果：",
+              "库存扣减：Redis Lua 预扣 + MySQL 异步落库，大促峰值 6000 QPS 下无超卖",
+              "稳定性：引入熔断与分级降级，核心链路 P99 从 210ms 降到 85ms，全年无 P1 故障",
+              "成本：合并冗余定时任务并改为事件驱动，服务器数量从 24 台降到 15 台"
+            ]
+          },
+          {
+            "id": "exp-2",
+            "org": "示例数据服务公司",
+            "title": "后端开发实习生",
+            "start": "2022-07",
+            "end": "2022-12",
+            "summary": "参与日志检索平台的查询服务开发",
+            "techStack": [
+              "Go",
+              "Elasticsearch"
+            ],
+            "bullets": [
+              "实现按租户隔离的查询网关，统一做鉴权、限流与慢查询记录",
+              "优化分页查询为 search_after，深分页接口耗时从 3s 降到 300ms 左右"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "m-proj",
+      "type": "project",
+      "visible": true,
+      "data": {
+        "items": [
+          {
+            "id": "proj-1",
+            "name": "轻量级分布式任务调度器",
+            "role": "独立开发",
+            "start": "2023-03",
+            "end": "2023-06",
+            "summary": "开源学习项目，支持定时任务、失败重试与任务分片",
+            "techStack": [
+              "Go",
+              "etcd",
+              "gRPC"
+            ],
+            "bullets": [
+              "基于 etcd 租约做 leader 选举与节点心跳，节点宕机后 10 秒内完成任务重新分配",
+              "实现时间轮调度，单节点稳定调度 2 万个定时任务",
+              "提供命令行与 Web 控制台，补齐单元测试，覆盖率 78%"
+            ],
+            "url": "https://github.com/example/mini-scheduler"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m-edu",
+      "type": "education",
+      "visible": true,
+      "data": {
+        "items": [
+          {
+            "id": "edu-1",
+            "school": "示例工业大学",
+            "major": "软件工程",
+            "degree": "本科",
+            "start": "2019-09",
+            "end": "2023-06",
+            "highlights": [
+              "GPA 3.6 / 4.0；主修操作系统、计算机网络、分布式系统"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "m-summary",
+      "type": "summary",
+      "visible": true,
+      "data": {
+        "text": "习惯先写压测与监控再上线，线上问题会整理复盘文档。对高并发交易系统和基础设施方向都有兴趣。"
+      }
+    }
+  ]
+}

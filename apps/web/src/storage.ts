@@ -167,9 +167,11 @@ export interface DocSummary {
   issueCount: number;
 }
 
-/** 生成新简历的存档 id */
+/** 生成新简历的存档 id。优先用 UUID；环境不支持时退回「毫秒时间戳 + 8 位随机」，避免同一毫秒内批量生成撞号 */
 export function newDocumentId(): string {
-  return `doc-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  if (c && typeof c.randomUUID === "function") return `doc-${c.randomUUID()}`;
+  return `doc-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function readList(): { ok: true; list: unknown[] } | { ok: false; message: string } {

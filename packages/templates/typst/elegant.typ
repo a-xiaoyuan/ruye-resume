@@ -37,25 +37,10 @@
     let c = contact-row(basic-module.data, icon-color: accent2)
     if c != none { lines.push(c) }
   }
-  let photo-w = 19mm
-  let side = if photo-path != none { photo-w + 4mm } else { 0mm }
   block(breakable: false, width: 100%, {
     double-rule
     v(3.2mm)
-    if photo-path != none { place(top + right, photo-box(photo-w)) }
-    let body = pad(left: side, right: side, align(center, {
-      set par(justify: false)
-      for (i, l) in lines.enumerate() {
-        if i == 1 { v(lead + 2.2mm) } else if i > 1 { v(lead + 1mm) }
-        block(l)
-      }
-    }))
-    // 照片比文字高时用照片高度撑开
-    context {
-      let h = measure(body, width: text-width).height
-      body
-      if photo-path != none and h < photo-w * 4 / 3 { v(photo-w * 4 / 3 - h) }
-    }
+    centered-header(lines, photo-w: 19mm, first-gap: 2.2mm, rest-gap: 1mm)
     v(3.2mm)
     // 下方双线与上方镜像：细线在上
     line(length: 100%, stroke: 0.4pt + accent)

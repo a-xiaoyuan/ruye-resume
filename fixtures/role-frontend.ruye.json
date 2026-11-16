@@ -1,0 +1,164 @@
+{
+  "version": 1,
+  "meta": {
+    "title": "温以宁-前端开发（示例，请替换）",
+    "locale": "zh-CN",
+    "updatedAt": "2026-11-15T00:00:00.000Z"
+  },
+  "layout": {
+    "templateId": "classic",
+    "pageMode": "fit-a4"
+  },
+  "modules": [
+    {
+      "id": "m-basic",
+      "type": "basic_info",
+      "visible": true,
+      "data": {
+        "name": "温以宁",
+        "phone": "13900000000",
+        "email": "yining.wen@example.com",
+        "location": "杭州",
+        "github": "https://github.com/example",
+        "website": "https://example.com"
+      }
+    },
+    {
+      "id": "m-intent",
+      "type": "job_intention",
+      "visible": true,
+      "data": {
+        "role": "前端开发工程师",
+        "city": "杭州",
+        "availability": "2027 届校招，可提前实习"
+      }
+    },
+    {
+      "id": "m-edu",
+      "type": "education",
+      "visible": true,
+      "data": {
+        "items": [
+          {
+            "id": "edu-1",
+            "school": "示例师范大学",
+            "major": "计算机科学与技术",
+            "degree": "本科",
+            "start": "2023-09",
+            "end": "2027-06",
+            "highlights": [
+              "GPA 3.8 / 4.0，专业前 5%；校前端技术社团负责人"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "m-skills",
+      "type": "skills",
+      "visible": true,
+      "data": {
+        "categories": [],
+        "notes": [
+          "熟悉 TypeScript 与 React，理解 Hooks 依赖与重渲染机制，能用 Profiler 定位性能问题",
+          "熟悉 CSS 布局与响应式设计，了解浏览器渲染流程，做过首屏与长列表性能优化",
+          "熟悉 Vite、Webpack 的配置与插件机制，了解 Node.js 与前端工程化",
+          "了解 Web Worker、WebAssembly 与可访问性（WAI-ARIA）"
+        ]
+      }
+    },
+    {
+      "id": "m-intern",
+      "type": "internship",
+      "visible": true,
+      "data": {
+        "items": [
+          {
+            "id": "exp-1",
+            "org": "示例在线教育公司",
+            "title": "前端开发实习生",
+            "start": "2026-06",
+            "end": "2026-09",
+            "summary": "参与课程后台与学员端 H5 的开发",
+            "techStack": [
+              "React",
+              "TypeScript",
+              "Ant Design"
+            ],
+            "bullets": [
+              "个人职责：",
+              "负责课程编辑器的章节拖拽排序与自动保存，处理离线编辑与冲突提示",
+              "将学员端 H5 的图片资源改为按需加载与 WebP 格式",
+              "工作成果：",
+              "首屏性能：拆分路由与第三方库，首屏 JS 从 1.2MB 降到 420KB，LCP 从 3.1s 降到 1.6s",
+              "质量：为编辑器补充 60 余个组件测试，相关线上问题从每周 5 个降到 1 个以内"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "m-proj",
+      "type": "project",
+      "visible": true,
+      "data": {
+        "items": [
+          {
+            "id": "proj-1",
+            "name": "所见即所得的简历编辑器",
+            "role": "独立开发",
+            "start": "2026-03",
+            "end": "2026-06",
+            "summary": "浏览器内实时预览、导出 PDF 的简历工具，本地优先，无需登录",
+            "techStack": [
+              "React",
+              "TypeScript",
+              "Web Worker"
+            ],
+            "bullets": [
+              "排版放进 Web Worker，连续输入时只排最新一版，主线程不再卡顿",
+              "实现撤销重做与本地自动保存，存档损坏时可下载原始数据，不覆盖",
+              "完成键盘可操作与读屏标注，Lighthouse 可访问性评分 100"
+            ],
+            "url": "https://github.com/example/resume-editor"
+          },
+          {
+            "id": "proj-2",
+            "name": "校园活动报名小程序",
+            "role": "前端负责人",
+            "start": "2025-09",
+            "end": "2025-12",
+            "summary": "四人小组课程项目，上线后服务 3 个学院的活动报名",
+            "techStack": [
+              "微信小程序",
+              "TypeScript"
+            ],
+            "bullets": [
+              "设计报名表单的配置化渲染，新增活动无需改代码",
+              "长列表改为虚拟滚动，千条数据滚动保持流畅"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "m-award",
+      "type": "award",
+      "visible": true,
+      "data": {
+        "items": [
+          {
+            "id": "aw-1",
+            "name": "中国大学生计算机设计大赛 省级一等奖",
+            "date": "2026-05"
+          },
+          {
+            "id": "aw-2",
+            "name": "校级优秀学生干部",
+            "date": "2025-06"
+          }
+        ]
+      }
+    }
+  ]
+}

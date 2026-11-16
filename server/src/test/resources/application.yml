@@ -7,10 +7,18 @@ spring:
     hibernate:
       ddl-auto: create-drop
     open-in-view: false
+  data:
+    redis:
+      repositories:
+        enabled: false
+  mail:
+    host: ""
 ruye:
+  public-url: http://localhost:5173
   jwt:
     secret: test-secret-that-is-long-enough-for-hs256!!
     ttl: 1h
+    refresh-ttl: 30d
   cors:
     allowed-origins: http://localhost:5173
   limits:
@@ -19,3 +27,11 @@ ruye:
   login:
     max-failures: 3
     lock-duration: 15m
+  rate-limit:
+    store: memory
+    login-per-ip: 25
+    register-per-ip: 60
+    reset-per-ip: 50
+    reset-per-email: 2
+  retention:
+    deleted-resume-days: 30

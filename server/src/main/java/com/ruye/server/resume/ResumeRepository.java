@@ -1,10 +1,12 @@
 package com.ruye.server.resume;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -25,4 +27,13 @@ public interface ResumeRepository extends JpaRepository<ResumeDocument, Long> {
 
     @Query("select count(r) from ResumeDocument r where r.owner.id = :ownerId and r.deleted = false")
     long countActive(@Param("ownerId") long ownerId);
+
+    @Modifying
+    @Query("delete from ResumeDocument r where r.owner.id = :ownerId")
+    int deleteAllByOwner(@Param("ownerId") long ownerId);
+
+    /** 彻底清除软删除超过保留期的简历 */
+    @Modifying
+    @Query("delete from ResumeDocument r where r.deleted = true and r.updatedAt < :before")
+    int purgeDeleted(@Param("before") Instant before);
 }

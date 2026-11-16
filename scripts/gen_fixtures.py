@@ -1,6 +1,8 @@
 # 生成 fixtures/*.ruye.json。人物与经历均为虚构示例。
 # 用法：python3 scripts/gen_fixtures.py
-import json, pathlib
+import json, pathlib, sys
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from role_samples import ROLE_SAMPLES
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -151,6 +153,10 @@ fixtures = {
                 [basic, intent, edu, skills_mixed, internship([intern1, intern2]),
                  projects([proj1, proj2, proj3, proj4]), research, award_long]),
 }
+# 按岗位的示例（见 role_samples.py）
+for key, title, template, modules in ROLE_SAMPLES:
+    fixtures[key] = doc(title, modules, template=template)
+
 out = ROOT / "fixtures"
 out.mkdir(exist_ok=True)
 for name, d in fixtures.items():

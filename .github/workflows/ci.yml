@@ -24,6 +24,9 @@ jobs:
       - run: pnpm fonts
       - run: pnpm test
       - run: pnpm build
+      # 端到端测试：真实浏览器里走编辑、换模板、导出 PDF、Markdown 往返等主流程
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm e2e
 
   server:
     runs-on: ubuntu-latest

@@ -22,7 +22,6 @@
 })
 
 #let header() = {
-  let photo-w = 21mm
   let lines = ()
   if basic-module != none {
     lines.push(text(size: t.namePt * 1pt, weight: "bold", fill: ink, tracking: 0.12em)[#basic-module.data.name])
@@ -35,27 +34,9 @@
     let c = contact-row(basic-module.data, icon-color: accent)
     if c != none { lines.push(c) }
   }
-  // 有照片时左右各留出照片宽度，文字仍在整页居中，且不会压到照片
-  let side = if photo-path != none { photo-w + 4mm } else { 0mm }
-  block(breakable: false, width: 100%, {
-    if photo-path != none { place(top + right, photo-box(photo-w)) }
-    pad(left: side, right: side, align(center, {
-      set par(justify: false)
-      for (i, l) in lines.enumerate() {
-        if i > 0 { v(lead + if i == 1 { 2.4mm } else { 1.2mm }) }
-        block(l)
-      }
-    }))
-  })
+  centered-header(lines, photo-w: 21mm, first-gap: 2.4mm, rest-gap: 1.2mm)
 }
 
-// 照片比文字高时，用照片高度撑开页眉，避免正文压到照片
-#context {
-  let hb = header()
-  let h = measure(hb, width: text-width).height
-  let ph = if photo-path != none { 21mm * 4 / 3 } else { 0mm }
-  hb
-  if ph > h { v(ph - h) }
-}
+#header()
 #if body-modules.len() > 0 { gap(t.sectionGapMm + 0.5) }
 #render-modules(body-modules, section-head, after-head: 2mm)

@@ -42,6 +42,7 @@ export function StylePanel({ doc, onChange }: { doc: RuyeDocument; onChange: (do
                   type="button"
                   role="radio"
                   aria-checked={on}
+                  aria-label={t.name}
                   title={t.description}
                   className={`tpl-card${on ? " on" : ""}`}
                   onClick={() => onChange({ ...doc, layout: { ...layout, templateId: t.id } })}

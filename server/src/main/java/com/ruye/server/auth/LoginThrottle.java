@@ -1,52 +1,38 @@
 package com.ruye.server.auth;
 
-import java.time.Clock;
-import java.time.Instant;
-import java.util.concurrent.ConcurrentHashMap;
-
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.ruye.server.config.RuyeProperties;
+import com.ruye.server.ratelimit.RateLimiter;
 
 /**
- * 登录失败限流：同一邮箱连续失败达到上限后锁定一段时间，防止暴力猜密码。
- * 单机内存实现，足够个人部署；多实例部署时应换成 Redis。
+ * 登录失败限流：同一邮箱在锁定时长内失败达到上限后，暂时拒绝该邮箱登录，防止暴力猜密码。
+ * 计数放在 RateLimiter 里（内存或 Redis），多实例部署时也能共享。
  */
 @Component
 public class LoginThrottle {
 
-    private record State(int failures, Instant lockedUntil) {}
-
-    private final ConcurrentHashMap<String, State> states = new ConcurrentHashMap<>();
+    private final RateLimiter limiter;
     private final RuyeProperties props;
-    private final Clock clock;
 
-    @Autowired
-    public LoginThrottle(RuyeProperties props) {
-        this(props, Clock.systemUTC());
-    }
-
-    LoginThrottle(RuyeProperties props, Clock clock) {
+    public LoginThrottle(RateLimiter limiter, RuyeProperties props) {
+        this.limiter = limiter;
         this.props = props;
-        this.clock = clock;
     }
 
-    /** 当前是否处于锁定期 */
+    private static String key(String email) {
+        return "login-fail:" + email;
+    }
+
     public boolean isLocked(String email) {
-        State s = states.get(email);
-        return s != null && s.lockedUntil() != null && clock.instant().isBefore(s.lockedUntil());
+        return limiter.current(key(email)) >= props.login().maxFailures();
     }
 
     public void recordFailure(String email) {
-        states.compute(email, (k, s) -> {
-            int n = (s == null || (s.lockedUntil() != null && !clock.instant().isBefore(s.lockedUntil()))) ? 1 : s.failures() + 1;
-            Instant until = n >= props.login().maxFailures() ? clock.instant().plus(props.login().lockDuration()) : null;
-            return new State(n, until);
-        });
+        limiter.increment(key(email), props.login().lockDuration());
     }
 
     public void recordSuccess(String email) {
-        states.remove(email);
+        limiter.reset(key(email));
     }
 }

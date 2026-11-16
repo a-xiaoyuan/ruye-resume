@@ -1,0 +1,153 @@
+{
+  "version": 1,
+  "meta": {
+    "title": "邵明川-测试开发（示例，请替换）",
+    "locale": "zh-CN",
+    "updatedAt": "2026-11-15T00:00:00.000Z"
+  },
+  "layout": {
+    "templateId": "minimal",
+    "pageMode": "fit-a4"
+  },
+  "modules": [
+    {
+      "id": "m-basic",
+      "type": "basic_info",
+      "visible": true,
+      "data": {
+        "name": "邵明川",
+        "phone": "13900000000",
+        "email": "mingchuan.shao@example.com",
+        "location": "深圳",
+        "github": "https://github.com/example"
+      }
+    },
+    {
+      "id": "m-intent",
+      "type": "job_intention",
+      "visible": true,
+      "data": {
+        "role": "测试开发工程师",
+        "city": "深圳 / 广州",
+        "availability": "2027 届校招"
+      }
+    },
+    {
+      "id": "m-edu",
+      "type": "education",
+      "visible": true,
+      "data": {
+        "items": [
+          {
+            "id": "edu-1",
+            "school": "示例电子科技大学",
+            "major": "软件工程",
+            "degree": "本科",
+            "start": "2023-09",
+            "end": "2027-06",
+            "highlights": [
+              "GPA 3.5 / 4.0；主修软件测试、软件工程、数据库原理"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "m-skills",
+      "type": "skills",
+      "visible": true,
+      "data": {
+        "categories": [],
+        "notes": [
+          "熟悉 Python 与 Java，能独立编写接口与 UI 自动化测试，熟悉 pytest、JUnit 5 与 Playwright",
+          "熟悉测试用例设计方法（等价类、边界值、状态迁移），能根据需求文档梳理测试点",
+          "熟悉 Linux 常用命令与 MySQL，能通过日志与慢查询定位问题",
+          "了解 JMeter 性能测试、Jenkins 与 GitHub Actions 持续集成"
+        ]
+      }
+    },
+    {
+      "id": "m-intern",
+      "type": "internship",
+      "visible": true,
+      "data": {
+        "items": [
+          {
+            "id": "exp-1",
+            "org": "示例支付科技公司",
+            "title": "测试开发实习生",
+            "start": "2026-07",
+            "end": "2026-10",
+            "summary": "负责商户结算模块的测试",
+            "techStack": [
+              "Python",
+              "pytest",
+              "MySQL",
+              "Jenkins"
+            ],
+            "bullets": [
+              "个人职责：",
+              "梳理结算规则的测试点，编写接口自动化用例 320 条，接入每日构建",
+              "设计金额计算的边界数据集，覆盖多币种、跨日结算和退款冲正",
+              "工作成果：",
+              "提效：回归测试从人工 2 天缩短到自动化 25 分钟",
+              "质量：提测前发现 14 个缺陷，其中 3 个会导致结算金额错误"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "m-proj",
+      "type": "project",
+      "visible": true,
+      "data": {
+        "items": [
+          {
+            "id": "proj-1",
+            "name": "接口自动化测试平台",
+            "role": "独立开发",
+            "start": "2026-03",
+            "end": "2026-06",
+            "summary": "支持用例管理、数据驱动、定时执行和测试报告",
+            "techStack": [
+              "Python",
+              "FastAPI",
+              "Vue",
+              "MySQL"
+            ],
+            "bullets": [
+              "用例与数据分离，一条用例可按数据集展开执行",
+              "执行结果对比上一次运行，自动标出新增失败与恢复的用例",
+              "接入飞书机器人推送报告，失败用例附带请求与响应快照"
+            ]
+          },
+          {
+            "id": "proj-2",
+            "name": "在线商城 UI 自动化",
+            "role": "测试负责人",
+            "start": "2025-10",
+            "end": "2025-12",
+            "summary": "课程项目，使用 Playwright 编写端到端测试",
+            "techStack": [
+              "Playwright",
+              "TypeScript"
+            ],
+            "bullets": [
+              "采用页面对象模式组织用例，40 条主流程用例可在 CI 中并行执行",
+              "通过请求拦截构造异常场景，覆盖支付失败、库存不足等分支"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "m-summary",
+      "type": "summary",
+      "visible": true,
+      "data": {
+        "text": "关注「怎么让问题更早被发现」：习惯把发现的缺陷沉淀成自动化用例，避免同类问题再出现。"
+      }
+    }
+  ]
+}

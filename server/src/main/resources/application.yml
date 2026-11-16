@@ -12,12 +12,31 @@ spring:
     hibernate:
       ddl-auto: update
     open-in-view: false
+  data:
+    redis:
+      # 只有 ruye.rate-limit.store=redis 时才会连接
+      host: ${RUYE_REDIS_HOST:localhost}
+      port: ${RUYE_REDIS_PORT:6379}
+      repositories:
+        enabled: false
+  # 找回密码邮件：设置了 RUYE_MAIL_HOST 才会真正发信，否则重置链接只写进日志
+  mail:
+    host: ${RUYE_MAIL_HOST:}
+    port: ${RUYE_MAIL_PORT:465}
+    username: ${RUYE_MAIL_USER:}
+    password: ${RUYE_MAIL_PASSWORD:}
+    properties:
+      mail.smtp.ssl.enable: ${RUYE_MAIL_SSL:true}
 
 ruye:
+  # 前端地址，用于拼找回密码链接
+  public-url: ${RUYE_PUBLIC_URL:http://localhost:5173}
   jwt:
     # 至少 32 个字符。生产环境必须通过环境变量 RUYE_JWT_SECRET 覆盖
     secret: ${RUYE_JWT_SECRET:dev-only-secret-change-me-please-32chars!!}
-    ttl: ${RUYE_JWT_TTL:7d}
+    # 访问令牌短期有效；过期后前端用刷新令牌换新（每次都轮换）
+    ttl: ${RUYE_JWT_TTL:15m}
+    refresh-ttl: ${RUYE_REFRESH_TTL:30d}
   cors:
     # 允许访问 API 的前端地址，逗号分隔
     allowed-origins: ${RUYE_CORS_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
@@ -30,3 +49,15 @@ ruye:
     # 同一邮箱连续失败多少次后暂时锁定，以及锁定时长
     max-failures: 5
     lock-duration: 15m
+  rate-limit:
+    # memory：单机内存计数；redis：多实例共享计数
+    store: ${RUYE_RATE_LIMIT_STORE:memory}
+    # 同一 IP：15 分钟内最多尝试登录次数、每小时最多注册次数、每小时最多申请重置密码次数
+    login-per-ip: 30
+    register-per-ip: 10
+    reset-per-ip: 10
+    # 同一邮箱每小时最多申请重置密码次数
+    reset-per-email: 3
+  retention:
+    # 软删除的简历保留多少天后彻底清除
+    deleted-resume-days: 30

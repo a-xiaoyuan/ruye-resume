@@ -1,6 +1,6 @@
 // 中栏：当前模块的表单
 import { useState } from "react";
-import { MODULE_LABELS, newId, type Module, type RuyeDocument, type SkillCategory } from "../../../../packages/schema/src/index.ts";
+import { lintDocument, MODULE_LABELS, newId, type Module, type RuyeDocument, type SkillCategory } from "../../../../packages/schema/src/index.ts";
 import { addItem, itemTitle, moveItem, removeItem, replaceModule, updateItem, type ListItem, type ListModule } from "../doc-ops.ts";
 import { BulletList, DateField, PhotoField, TagInput, TextArea, TextField } from "./fields.tsx";
 
@@ -41,6 +41,7 @@ export function ModuleEditor({ doc, module: m, onChange, onRemove, onError, onRe
         </button>
       </div>
       {MODULE_HINTS[m.type] && <p className="editor-sub">{MODULE_HINTS[m.type]}</p>}
+      <WritingTips doc={doc} module={m} />
 
       {m.type === "basic_info" && (
         <div className="form-grid">
@@ -79,6 +80,34 @@ export function ModuleEditor({ doc, module: m, onChange, onRemove, onError, onRe
 
       {"items" in m.data && <ItemsEditor doc={doc} module={m as ListModule} onChange={onChange} onRemove={onRemove} />}
     </div>
+  );
+}
+
+/** 写作建议：只显示当前模块的；可以收起 */
+function WritingTips({ doc, module: m }: { doc: RuyeDocument; module: Module }) {
+  const [open, setOpen] = useState(true);
+  const issues = lintDocument(doc).filter((i) => i.moduleId === m.id);
+  if (issues.length === 0) return null;
+  const items = "items" in m.data ? (m.data.items as ListItem[]) : [];
+  return (
+    <section className={`writing-tips${issues.some((i) => i.level === "warn") ? " warn" : ""}`} aria-label="写作建议">
+      <button type="button" className="writing-tips-head" aria-expanded={open} onClick={() => setOpen((x) => !x)}>
+        写作建议 · {issues.length} 条<span>{open ? "收起" : "展开"}</span>
+      </button>
+      {open && (
+        <ul>
+          {issues.map((i, k) => {
+            const it = i.itemId ? items.find((x) => x.id === i.itemId) : undefined;
+            return (
+              <li key={k}>
+                {it && <b>{itemTitle(it)}：</b>}
+                {i.message}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }
 

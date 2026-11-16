@@ -3,9 +3,7 @@ import {
   checkExportable,
   createEmptyDocument,
   exportBaseName,
-  fromMarkdown,
   MODULE_LABELS,
-  recoverDocument,
   toMarkdown,
   validateDocument,
   type ModuleType,
@@ -13,28 +11,18 @@ import {
   type RuyeDocument,
 } from "../../../packages/schema/src/index.ts";
 import { findMissingChars } from "../../../packages/engine/src/index.ts";
-import { sortByRecommended } from "../../../packages/templates/src/index.ts";
 import { createLayoutClient } from "./layout-client.ts";
 import { deleteDocument, download, listDocuments, loadDocument, loadOutcome, newDocumentId, openSession, saveCurrent, saveStatusText, setCurrentId, type SaveMode, putDocument } from "./storage.ts";
 import { DocSwitcher } from "./components/DocSwitcher.tsx";
 import { addModule, duplicateDocument, removeModule, setAlias, syncTitle } from "./doc-ops.ts";
-import { ModuleNav } from "./components/ModuleNav.tsx";
 import { ModuleEditor } from "./components/ModuleEditor.tsx";
 import { Preview, type PreviewData } from "./components/Preview.tsx";
-import { StylePanel, StyleSummary } from "./components/StylePanel.tsx";
-import { Icon } from "./components/icons.tsx";
 import { AccountMenu, useCloudSync } from "./components/AccountMenu.tsx";
-import fullSample from "../../../fixtures/full.ruye.json";
-import shortSample from "../../../fixtures/short.ruye.json";
-import mediumSample from "../../../fixtures/medium.ruye.json";
-import longSample from "../../../fixtures/long.ruye.json";
-
-const SAMPLES: Record<string, RuyeDocument> = {
-  full: fullSample as RuyeDocument,
-  short: shortSample as RuyeDocument,
-  medium: mediumSample as RuyeDocument,
-  long: longSample as RuyeDocument,
-};
+import { SAMPLES, SAMPLE_MENU } from "./samples.ts";
+import { parseImport } from "./import-file.ts";
+import { Logo, Menu } from "./components/Menu.tsx";
+import { Sidebar } from "./components/Sidebar.tsx";
+import { OverflowDialog } from "./components/OverflowDialog.tsx";
 
 interface Notice {
   text: string;
@@ -45,77 +33,9 @@ interface Notice {
   sticky?: boolean;
 }
 
-interface MenuItem {
-  key: string;
-  label: string;
-  hint?: string;
-}
-
-function Logo() {
-  return (
-    <svg width="30" height="30" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-      <rect x="5" y="3" width="22" height="26" rx="4" fill="#3b5bdb" />
-      <path d="M19 3h8v8z" fill="#93a5f2" />
-      <rect x="10" y="12" width="12" height="2" rx="1" fill="#fff" />
-      <rect x="10" y="17" width="9" height="2" rx="1" fill="#fff" opacity=".8" />
-      <rect x="10" y="22" width="11" height="2" rx="1" fill="#fff" opacity=".55" />
-    </svg>
-  );
-}
-
-function Menu({ label, items, onPick, right }: { label: string; items: MenuItem[]; onPick: (key: string) => void; right?: boolean }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const esc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", close);
-    document.addEventListener("keydown", esc);
-    return () => {
-      document.removeEventListener("mousedown", close);
-      document.removeEventListener("keydown", esc);
-    };
-  }, [open]);
-
-  return (
-    <div className="menu" ref={ref}>
-      <button type="button" className="menu-trigger" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((v) => !v)}>
-        {label}
-        <span className="caret" aria-hidden="true">
-          ▾
-        </span>
-      </button>
-      {open && (
-        <div className={`menu-list${right ? " right" : ""}`} role="menu">
-          {items.map((it) => (
-            <button
-              key={it.key}
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setOpen(false);
-                onPick(it.key);
-              }}
-            >
-              <span>{it.label}</span>
-              {it.hint && <em>{it.hint}</em>}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function App() {
   const opened = useMemo(() => openSession(loadOutcome(), structuredClone(SAMPLES.full)), []);
   const [doc, setDoc] = useState<RuyeDocument>(opened.doc);
-  const [sideTab, setSideTab] = useState<"content" | "style">("content");
   const [isSample, setIsSample] = useState(opened.isSample);
   const [persist, setPersist] = useState(opened.persist);
   const [writeMode, setWriteMode] = useState<SaveMode>("merge");
@@ -309,29 +229,11 @@ export function App() {
   }
 
   async function importFile(file: File) {
-    const text = await file.text();
-    if (file.name.endsWith(".json")) {
-      try {
-        const recovered = recoverDocument(JSON.parse(text));
-        if (!recovered) return setNotice({ text: "导入失败：这份 JSON 不是可恢复的如页简历，当前内容没有被替换。", level: "error", sticky: true });
-        replaceAll(recovered.doc);
-        setRawBackup(null);
-        if (recovered.issues.length > 0) {
-          const detail = recovered.issues.slice(0, 3).map((i) => `${i.path} ${i.message}`).join("；");
-          setNotice({ text: `已导入，姓名和正文都保留着。有 ${recovered.issues.length} 处格式问题：${detail}`, level: "error", sticky: true });
-        } else {
-          setNotice({ text: `已导入「${recovered.doc.meta.title}」。` });
-        }
-      } catch (e) {
-        setNotice({ text: `导入失败：不是合法的 JSON（${(e as Error).message}）。当前内容没有被替换。`, level: "error", sticky: true });
-      }
-    } else {
-      const { doc: parsed, warnings } = fromMarkdown(text);
-      const v = validateDocument(parsed);
-      if (!v.ok) return setNotice({ text: `导入失败：${v.issues.slice(0, 3).map((i) => `${i.path} ${i.message}`).join("；")}`, level: "error" });
-      replaceAll(parsed);
-      setNotice({ text: warnings.length ? `已导入，但有 ${warnings.length} 处没能识别：${warnings.slice(0, 3).join("；")}` : "已从 Markdown 导入。" });
-    }
+    const r = parseImport(file.name, await file.text());
+    if (!r.ok) return setNotice({ text: r.message, level: "error", sticky: r.sticky });
+    replaceAll(r.doc);
+    setRawBackup(null);
+    setNotice({ text: r.message, level: r.level, sticky: r.sticky });
   }
 
   function addNewModule(type: ModuleType) {
@@ -401,10 +303,7 @@ export function App() {
             items={[
               { key: "import", label: "导入简历", hint: ".ruye.json / .md" },
               { key: "new", label: "新建空白简历" },
-              { key: "sample:full", label: "载入示例", hint: "完整" },
-              { key: "sample:short", label: "载入示例", hint: "短" },
-              { key: "sample:medium", label: "载入示例", hint: "中" },
-              { key: "sample:long", label: "载入示例", hint: "长" },
+              ...SAMPLE_MENU,
             ]}
           />
           <Menu
@@ -466,33 +365,7 @@ export function App() {
       </div>
 
       <main className="panes">
-        <aside className="sidebar">
-          <div className="side-tabs" role="tablist" aria-label="左栏">
-            <button type="button" role="tab" aria-selected={sideTab === "content"} className={sideTab === "content" ? "on" : ""} onClick={() => setSideTab("content")}>
-              <Icon name="layers" size={15} />
-              内容
-            </button>
-            <button type="button" role="tab" aria-selected={sideTab === "style"} className={sideTab === "style" ? "on" : ""} onClick={() => setSideTab("style")}>
-              <Icon name="palette" size={15} />
-              模板与样式
-            </button>
-          </div>
-          {sideTab === "content" ? (
-            <>
-              <StyleSummary doc={doc} onOpen={() => setSideTab("style")} />
-              <ModuleNav
-                doc={doc}
-                activeId={activeId}
-                onSelect={setActiveId}
-                onChange={update}
-                onAdd={addNewModule}
-                onSortRecommended={() => update(sortByRecommended(doc, doc.layout.templateId))}
-              />
-            </>
-          ) : (
-            <StylePanel doc={doc} onChange={update} />
-          )}
-        </aside>
+        <Sidebar doc={doc} activeId={activeId} onSelect={setActiveId} onChange={update} onAdd={addNewModule} />
 
         <section className="editor" aria-label="编辑">
           {active ? (
@@ -532,21 +405,7 @@ export function App() {
         </section>
       </main>
 
-      {overflowDialog && (
-        <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-labelledby="ovf-title">
-          <div className="dialog">
-            <h2 id="ovf-title">装不进一页 A4</h2>
-            <p>当前内容无法在可读性底线内放入一页 A4，所以不会导出一份「号称一页」却溢出的文件。你可以：</p>
-            <div className="dialog-actions">
-              <button className="primary" onClick={() => exportPdf("continuous")}>
-                改为无损长一页导出
-              </button>
-              <button onClick={() => exportPdf("standard")}>改为标准分页导出</button>
-              <button onClick={() => setOverflowDialog(false)}>回去精简内容</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {overflowDialog && <OverflowDialog onExport={(m) => exportPdf(m)} onClose={() => setOverflowDialog(false)} />}
     </div>
   );
 }

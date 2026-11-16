@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "meta": {
+    "title": "何清越-算法工程师（示例，请替换）",
+    "locale": "zh-CN",
+    "updatedAt": "2026-11-15T00:00:00.000Z"
+  },
+  "layout": {
+    "templateId": "elegant",
+    "pageMode": "fit-a4"
+  },
+  "modules": [
+    {
+      "id": "m-basic",
+      "type": "basic_info",
+      "visible": true,
+      "data": {
+        "name": "何清越",
+        "phone": "13900000000",
+        "email": "qingyue.he@example.com",
+        "location": "北京",
+        "github": "https://github.com/example"
+      }
+    },
+    {
+      "id": "m-intent",
+      "type": "job_intention",
+      "visible": true,
+      "data": {
+        "role": "算法工程师（大模型应用方向）",
+        "city": "北京",
+        "availability": "2027 届校招"
+      }
+    },
+    {
+      "id": "m-edu",
+      "type": "education",
+      "visible": true,
+      "data": {
+        "items": [
+          {
+            "id": "edu-1",
+            "school": "示例科技大学",
+            "major": "人工智能",
+            "degree": "硕士",
+            "start": "2024-09",
+            "end": "2027-06",
+            "highlights": [
+              "研究方向：检索增强生成与大模型评测；GPA 3.8 / 4.0"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "m-edu2",
+      "type": "research",
+      "visible": true,
+      "data": {
+        "items": [
+          {
+            "id": "rs-1",
+            "name": "面向长文档问答的检索增强方法",
+            "org": "自然语言处理实验室",
+            "start": "2025-03",
+            "end": "2026-06",
+            "bullets": [
+              "提出按章节层级召回再重排的检索策略，在自建长文档问答集上答案准确率提升 6.4 个百分点",
+              "构建 3000 条人工标注的评测集，设计忠实度与引用准确率两项指标",
+              "论文以第一作者投稿至国内 NLP 会议，在审"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "m-skills",
+      "type": "skills",
+      "visible": true,
+      "data": {
+        "categories": [],
+        "notes": [
+          "熟悉 PyTorch 与 Transformers，有 LoRA 微调与 vLLM 推理部署经验",
+          "熟悉检索增强生成的完整链路：切分、向量化、召回、重排与评测",
+          "熟悉常用机器学习算法与评估方法，能设计离线评测并分析错误案例",
+          "了解 CUDA 基础与分布式训练（DeepSpeed ZeRO）"
+        ]
+      }
+    },
+    {
+      "id": "m-intern",
+      "type": "internship",
+      "visible": true,
+      "data": {
+        "items": [
+          {
+            "id": "exp-1",
+            "org": "示例智能科技公司",
+            "title": "算法实习生",
+            "start": "2026-06",
+            "end": "2026-09",
+            "summary": "参与企业知识库问答系统",
+            "techStack": [
+              "Python",
+              "PyTorch",
+              "vLLM",
+              "Milvus"
+            ],
+            "bullets": [
+              "召回优化：引入混合检索与重排模型，Top-5 召回率从 71% 提升到 86%",
+              "微调：用 1.2 万条业务问答对 7B 模型做 LoRA 微调，拒答准确率提升 12 个百分点",
+              "评测：搭建自动评测流水线，每次模型更新 20 分钟内出报告"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "m-award",
+      "type": "award",
+      "visible": true,
+      "data": {
+        "items": [
+          {
+            "id": "aw-1",
+            "name": "天池大模型应用挑战赛 季军",
+            "date": "2025-11"
+          },
+          {
+            "id": "aw-2",
+            "name": "研究生国家奖学金",
+            "date": "2025-10"
+          }
+        ]
+      }
+    }
+  ]
+}

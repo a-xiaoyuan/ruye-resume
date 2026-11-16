@@ -3,6 +3,7 @@ import {
   checkExportable,
   createEmptyDocument,
   exportBaseName,
+  lintDocument,
   MODULE_LABELS,
   toMarkdown,
   validateDocument,
@@ -10,7 +11,7 @@ import {
   type PageMode,
   type RuyeDocument,
 } from "../../../packages/schema/src/index.ts";
-import { findMissingChars } from "../../../packages/engine/src/index.ts";
+import { describeFit, findMissingChars } from "../../../packages/engine/src/index.ts";
 import { createLayoutClient } from "./layout-client.ts";
 import { deleteDocument, download, listDocuments, loadDocument, loadOutcome, newDocumentId, openSession, saveCurrent, saveStatusText, setCurrentId, type SaveMode, putDocument } from "./storage.ts";
 import { DocSwitcher } from "./components/DocSwitcher.tsx";
@@ -22,7 +23,11 @@ import { SAMPLES, SAMPLE_MENU } from "./samples.ts";
 import { parseImport } from "./import-file.ts";
 import { Logo, Menu } from "./components/Menu.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
+import { AppearanceMenu } from "./components/AppearanceMenu.tsx";
 import { OverflowDialog } from "./components/OverflowDialog.tsx";
+import { StatusBar } from "./components/StatusBar.tsx";
+import { loadSkin, MODULE_FILES, saveSkin, SKINS, type Skin } from "./skin.ts";
+import { templateMeta } from "../../../packages/templates/src/index.ts";
 
 interface Notice {
   text: string;
@@ -57,13 +62,26 @@ export function App() {
   const [overflowDialog, setOverflowDialog] = useState(false);
   const [zoom, setZoom] = useState(1);
   const fileInput = useRef<HTMLInputElement>(null);
+  const [skin, setSkinState] = useState<Skin>(loadSkin);
+  // 纸感：整篇连着写；终端和稿纸：一次只摊开一个模块
+  const single = skin !== "paper";
+  const shownId = doc.modules.some((m) => m.id === activeId) ? activeId : (doc.modules[0]?.id ?? null);
+  const shownIndex = doc.modules.findIndex((m) => m.id === shownId);
+  const setSkin = (s: Skin) => {
+    setSkinState(s);
+    saveSkin(s);
+  };
+  const editorRef = useRef<HTMLElement>(null);
+  // 点大纲时正在平滑滚动：这段时间不让滚动监听改写高亮
+  const jumping = useRef(0);
+  // 终端皮肤的「已打开的文件」标签
+  const [openTabs, setOpenTabs] = useState<string[]>([]);
 
   const issues = useMemo(() => {
     const v = validateDocument(doc);
     return v.ok ? [] : v.issues;
   }, [doc]);
   const mode = doc.layout.pageMode;
-  const active = doc.modules.find((m) => m.id === activeId) ?? null;
 
   // 撤销只保存「删除前」的整份文档；删除之后又有新编辑时，撤销会连新编辑一起丢掉，所以此时让撤销失效
   const update = (next: RuyeDocument) => {
@@ -239,8 +257,35 @@ export function App() {
   function addNewModule(type: ModuleType) {
     const r = addModule(doc, type);
     update(r.doc);
-    setActiveId(r.id);
+    jumpTo(r.id);
   }
+
+  /** 大纲点一项：滚到中间对应的模块 */
+  function jumpTo(id: string) {
+    setActiveId(id);
+    setOpenTabs((t) => (t.includes(id) ? t : [...t, id].slice(-5)));
+    jumping.current = Date.now();
+    requestAnimationFrame(() => document.getElementById(`module-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
+
+  // 滚动时高亮大纲里当前所在的模块：取顶部越过编辑区上沿（留 96px）的最后一个模块
+  useEffect(() => {
+    const el = editorRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      if (Date.now() - jumping.current < 700) return;
+      const top = el.getBoundingClientRect().top + 96;
+      let current: string | null = null;
+      for (const s of el.querySelectorAll<HTMLElement>("[data-module]")) {
+        if (s.getBoundingClientRect().top <= top) current = s.dataset.module ?? null;
+        else break;
+      }
+      const first = el.querySelector<HTMLElement>("[data-module]")?.dataset.module ?? null;
+      setActiveId(current ?? first);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
 
   function onFileMenu(key: string) {
     if (key === "import") fileInput.current?.click();
@@ -265,9 +310,14 @@ export function App() {
   }
 
   return (
-    <div className="app">
+    <div className="app" data-skin={skin}>
       <header className="topbar">
         <div className="brand">
+          <span className="win-dots" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </span>
           <Logo />
           <span className="brand-name">
             如页<em>Ruye</em>
@@ -296,6 +346,13 @@ export function App() {
         </DocSwitcher>
 
         <div className="actions">
+          <AppearanceMenu doc={doc} onChange={update} />
+          <Menu
+            label={`界面 · ${SKINS.find((s) => s.key === skin)!.label}`}
+            right
+            onPick={(k) => setSkin(k as Skin)}
+            items={SKINS.map((s) => ({ key: s.key, label: s.key === skin ? `✓ ${s.label}` : s.label, hint: s.hint }))}
+          />
           <AccountMenu cloud={cloud} />
           <Menu
             label="文件"
@@ -365,45 +422,107 @@ export function App() {
       </div>
 
       <main className="panes">
-        <Sidebar doc={doc} activeId={activeId} onSelect={setActiveId} onChange={update} onAdd={addNewModule} />
+        <Sidebar doc={doc} activeId={activeId} onSelect={jumpTo} onChange={update} onAdd={addNewModule} />
 
-        <section className="editor" aria-label="编辑">
-          {active ? (
-            <ModuleEditor
-              doc={doc}
-              module={active}
-              onChange={update}
-              onRemove={remove}
-              onError={(text) => setNotice({ text, level: "error" })}
-              onRemoveModule={() => {
-                remove(removeModule(doc, active.id), `模块「${MODULE_LABELS[active.type]}」`);
-                setActiveId(doc.modules.find((m) => m.id !== active.id)?.id ?? null);
-              }}
-            />
-          ) : (
-            <div className="empty">
-              <div className="empty-icon" aria-hidden="true">
-                ✎
-              </div>
-              <p>从左侧挑一个模块开始写。</p>
-              <span>模块可拖拽排序，开关控制是否出现在简历里。</span>
+        <section className="editor" aria-label="编辑" ref={editorRef}>
+          {skin === "terminal" && (
+            <div className="file-tabs" role="tablist" aria-label="已打开的模块">
+              {openTabs
+                .map((id) => doc.modules.find((m) => m.id === id))
+                .filter((m): m is NonNullable<typeof m> => !!m)
+                .concat(doc.modules.filter((m) => m.id === shownId && !openTabs.includes(m.id)))
+                .map((m) => (
+                  <span key={m.id} className={`file-tab${m.id === shownId ? " on" : ""}`} role="tab" aria-selected={m.id === shownId}>
+                    <button type="button" onClick={() => jumpTo(m.id)}>
+                      {MODULE_FILES[m.type]}
+                    </button>
+                    <button
+                      type="button"
+                      className="file-tab-close"
+                      aria-label={`关闭 ${MODULE_FILES[m.type]}`}
+                      onClick={() => {
+                        const rest = openTabs.filter((x) => x !== m.id);
+                        setOpenTabs(rest);
+                        if (m.id === shownId && rest.length) setActiveId(rest[rest.length - 1]);
+                      }}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
             </div>
           )}
-          {issues.length > 0 && (
-            <ul className="problems" aria-label="需要修正的内容">
-              {issues.slice(0, 6).map((i) => (
-                <li key={i.path + i.message}>
-                  {i.path}：{i.message}
-                </li>
-              ))}
-            </ul>
-          )}
+          <div className="doc-editor">
+            {issues.length > 0 && (
+              <ul className="problems" aria-label="需要修正的内容">
+                {issues.slice(0, 6).map((i) => (
+                  <li key={i.path + i.message}>
+                    {i.path}：{i.message}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {(single ? doc.modules.filter((m) => m.id === shownId) : doc.modules).map((m) => (
+              <ModuleEditor
+                key={m.id}
+                doc={doc}
+                module={m}
+                onChange={update}
+                onRemove={remove}
+                onError={(text) => setNotice({ text, level: "error" })}
+                onRemoveModule={() => {
+                  const i = doc.modules.findIndex((x) => x.id === m.id);
+                  const next = doc.modules[i + 1] ?? doc.modules[i - 1];
+                  remove(removeModule(doc, m.id), `模块「${MODULE_LABELS[m.type]}」`);
+                  if (single && next) setActiveId(next.id);
+                  setOpenTabs((t) => t.filter((x) => x !== m.id));
+                }}
+              />
+            ))}
+            {single && shownIndex >= 0 && (
+              <nav className="module-pager" aria-label="上一个、下一个模块">
+                {shownIndex > 0 ? (
+                  <button type="button" onClick={() => jumpTo(doc.modules[shownIndex - 1].id)}>
+                    <span>上一节</span>
+                    {MODULE_LABELS[doc.modules[shownIndex - 1].type]}
+                  </button>
+                ) : (
+                  <i />
+                )}
+                {shownIndex < doc.modules.length - 1 && (
+                  <button type="button" className="next" onClick={() => jumpTo(doc.modules[shownIndex + 1].id)}>
+                    <span>下一节</span>
+                    {MODULE_LABELS[doc.modules[shownIndex + 1].type]}
+                  </button>
+                )}
+              </nav>
+            )}
+            {doc.modules.length === 0 && (
+              <div className="empty">
+                <p>这份简历还没有任何模块。</p>
+                <span>从左侧「添加模块」开始，先加基本信息。</span>
+              </div>
+            )}
+          </div>
         </section>
 
         <section className="preview" aria-label="A4 预览">
           <Preview data={preview} error={fatal} busy={busy} zoom={zoom} onZoom={setZoom} />
         </section>
       </main>
+
+      <StatusBar
+        items={[
+          "markdown · utf-8",
+          templateMeta(doc.layout.templateId).name,
+          preview?.result ? describeFit(preview.result).short : "",
+          (() => {
+            const n = lintDocument(doc).length;
+            return n ? `建议 ${n}` : "建议 0";
+          })(),
+          saveStatusText(savePhase, issues.length),
+        ]}
+      />
 
       {overflowDialog && <OverflowDialog onExport={(m) => exportPdf(m)} onClose={() => setOverflowDialog(false)} />}
     </div>

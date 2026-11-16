@@ -129,7 +129,7 @@ export const TEMPLATE_META: TemplateMeta[] = [
   {
     id: "classic",
     name: "经典 · 简洁",
-    description: "姓名居中、单一主色、细线标题，没有大面积色块。打印清爽、系统解析稳妥，适合绝大多数投递。",
+    description: "姓名左对齐、单一主色、细线标题，没有大面积色块。打印清爽、系统解析稳妥，适合绝大多数投递。",
     tokens: CLASSIC_TOKENS,
     recommendedOrder: ["basic_info", "job_intention", "education", "skills", "internship", "work", "project", "research", "paper", "award", "summary"],
     group: "classic",

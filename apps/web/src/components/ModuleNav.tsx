@@ -3,6 +3,7 @@ import { useState } from "react";
 import { MODULE_LABELS, type ModuleType, type RuyeDocument } from "../../../../packages/schema/src/index.ts";
 import { missingTypes, moduleSummary, moveModule, moveModuleTo, toggleModule } from "../doc-ops.ts";
 import { Icon } from "./icons.tsx";
+import { MODULE_FILES } from "../skin.ts";
 
 interface Props {
   doc: RuyeDocument;
@@ -22,9 +23,9 @@ export function ModuleNav({ doc, activeId, onSelect, onChange, onAdd, onSortReco
   return (
     <nav className="module-nav" aria-label="简历模块">
       <div className="panel-caption">
-        模块
+        简历结构
         <span>
-          {shown} / {doc.modules.length} 显示中
+          {shown} / {doc.modules.length} 项显示
         </span>
       </div>
       <ul>
@@ -57,10 +58,10 @@ export function ModuleNav({ doc, activeId, onSelect, onChange, onAdd, onSortReco
               <Icon name="grip" size={14} />
             </span>
             <button type="button" className="module-btn" aria-current={m.id === activeId} onClick={() => onSelect(m.id)}>
-              <span className="module-icon" aria-hidden="true">
-                <Icon name={m.type} size={15} />
-              </span>
               <span className="module-name">{MODULE_LABELS[m.type]}</span>
+              <span className="module-file" aria-hidden="true">
+                {MODULE_FILES[m.type]}
+              </span>
               <span className="module-sub">{moduleSummary(m)}</span>
             </button>
             <div className="nav-actions">
@@ -87,11 +88,11 @@ export function ModuleNav({ doc, activeId, onSelect, onChange, onAdd, onSortReco
 
       {missing.length > 0 && (
         <>
-          <div className="panel-caption add-caption">添加模块</div>
+          <div className="panel-caption add-caption">还可以添加</div>
           <div className="add-chips">
             {missing.map((t) => (
               <button key={t} type="button" className="add-chip" onClick={() => onAdd(t)}>
-                <Icon name="plus" size={12} strokeWidth={2.4} />
+                <Icon name="plus" size={12} strokeWidth={2.2} />
                 {MODULE_LABELS[t]}
               </button>
             ))}
@@ -100,7 +101,7 @@ export function ModuleNav({ doc, activeId, onSelect, onChange, onAdd, onSortReco
       )}
       <button type="button" className="link-btn sort-btn" onClick={onSortRecommended}>
         <Icon name="sort" size={14} />
-        按当前模板的推荐顺序排列
+        按模板推荐顺序排列
       </button>
     </nav>
   );

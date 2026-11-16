@@ -1,17 +1,27 @@
 // 中栏：当前模块的表单
-import { useState } from "react";
-import { lintDocument, MODULE_LABELS, newId, type Module, type RuyeDocument, type SkillCategory } from "../../../../packages/schema/src/index.ts";
+import { useEffect, useState } from "react";
+import { MODULE_FILES } from "../skin.ts";
+import { lintDocument, MODULE_LABELS, newId, type LintIssue, type Module, type RuyeDocument, type SkillCategory } from "../../../../packages/schema/src/index.ts";
 import { addItem, itemTitle, moveItem, removeItem, replaceModule, updateItem, type ListItem, type ListModule } from "../doc-ops.ts";
+import { Icon } from "./icons.tsx";
 import { BulletList, DateField, PhotoField, TagInput, TextArea, TextField } from "./fields.tsx";
+
+/** 经历类模块的写法提示，收在「写法提示」里，需要时展开 */
+const BULLET_GUIDE = [
+  "每条要点尽量是「动作 + 技术 + 可量化结果」，例如：引入二级缓存，将 P99 从 320ms 降到 140ms。",
+  "单独一行写「个人职责：」「技术亮点：」，会变成分块小标题。",
+  "句首写「缓存优化：……」，冒号前的短语会加粗，方便招聘方先扫标题。",
+  "一条控制在两行以内（约 60 字），太长就拆成两条。",
+];
 
 const MODULE_HINTS: Record<string, string> = {
   basic_info: "姓名 + 求职意向会拼成文档标题。照片只在本机处理，不会上传。",
   job_intention: "岗位与城市写具体；期望薪资一般不建议写。",
   skills: "两种写法：分类列表适合列技术栈，描述句适合写掌握深度。可以只用一种，也可以混用。",
   education: "校招建议把教育放在前面；亮点写 GPA、专业排名、奖学金。",
-  work: "每条要点尽量是「动作 + 技术 + 可量化结果」。要点里单独一行写「个人职责：」「技术亮点：」会成为分块小标题；「缓存优化：……」会加粗冒号前的短标题。",
-  internship: "实习经历按时间倒序；技术栈用标签，回车添加。要点里单独一行写「个人职责：」「技术亮点：」会成为分块小标题；「缓存优化：……」会加粗冒号前的短标题。",
-  project: "突出你负责的部分和结果，链接放可访问的仓库或演示地址。要点里单独一行写「个人职责：」「技术亮点：」会成为分块小标题；「缓存优化：……」会加粗冒号前的短标题。",
+  work: "按时间倒序，写清你负责什么、做成了什么。",
+  internship: "按时间倒序；技术栈回车添加。",
+  project: "突出你负责的部分和结果；链接放可以打开的仓库或演示地址。",
   research: "写清课题、你的分工与产出。",
   paper: "期刊 / 会议与日期尽量写全。",
   award: "只放与目标岗位相关、有区分度的奖项。",
@@ -29,19 +39,42 @@ interface Props {
 }
 
 export function ModuleEditor({ doc, module: m, onChange, onRemove, onError, onRemoveModule }: Props) {
+  // 展开的是哪个条目：写作建议里点一条，会直接展开对应条目
+  const firstItem = "items" in m.data && m.data.items.length === 1 ? (m.data.items[0] as { id: string }).id : null;
+  const [openItem, setOpenItem] = useState<string | null>(firstItem);
+  useEffect(() => setOpenItem(firstItem), [m.id]);
+  const focusItem = (id: string) => {
+    setOpenItem(id);
+    requestAnimationFrame(() => document.getElementById(`item-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  };
+  // 写作建议：跟条目有关的标在条目卡片上，其余（联系方式、「精通」过多等）放在标题下方一行
+  const issues = lintDocument(doc).filter((i) => i.moduleId === m.id);
   const patchData = (patch: Record<string, unknown>) => onChange(replaceModule(doc, m.id, (x) => ({ ...x, data: { ...x.data, ...patch } }) as Module));
 
   return (
-    <div className="module-editor">
+    <section className={`module-editor${m.visible ? "" : " is-hidden"}`} id={`module-${m.id}`} data-module={m.id} aria-labelledby={`module-title-${m.id}`}>
       <div className="editor-head">
-        <h2>{MODULE_LABELS[m.type]}</h2>
+        <h2 id={`module-title-${m.id}`}>{MODULE_LABELS[m.type]}</h2>
+        <span className="module-path" aria-hidden="true">
+          {MODULE_FILES[m.type]}
+        </span>
         {!m.visible && <span className="badge">已隐藏，不会出现在简历里</span>}
-        <button type="button" className="danger-link" onClick={onRemoveModule}>
+        <button type="button" className="danger-link" onClick={onRemoveModule} aria-label={`删除模块「${MODULE_LABELS[m.type]}」`}>
           删除模块
         </button>
       </div>
       {MODULE_HINTS[m.type] && <p className="editor-sub">{MODULE_HINTS[m.type]}</p>}
-      <WritingTips doc={doc} module={m} />
+      {(m.type === "work" || m.type === "internship" || m.type === "project" || m.type === "research") && (
+        <details className="guide">
+          <summary>写法提示</summary>
+          <ul>
+            {BULLET_GUIDE.map((g) => (
+              <li key={g}>{g}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+      <WritingTips issues={issues} onFocusItem={focusItem} />
 
       {m.type === "basic_info" && (
         <div className="form-grid">
@@ -78,34 +111,39 @@ export function ModuleEditor({ doc, module: m, onChange, onRemove, onError, onRe
 
       {m.type === "skills" && <SkillsEditor doc={doc} module={m} onChange={onChange} onRemove={onRemove} />}
 
-      {"items" in m.data && <ItemsEditor doc={doc} module={m as ListModule} onChange={onChange} onRemove={onRemove} />}
-    </div>
+      {"items" in m.data && <ItemsEditor doc={doc} module={m as ListModule} issues={issues} onChange={onChange} onRemove={onRemove} open={openItem} setOpen={setOpenItem} />}
+    </section>
   );
 }
 
-/** 写作建议：只显示当前模块的；可以收起 */
-function WritingTips({ doc, module: m }: { doc: RuyeDocument; module: Module }) {
-  const [open, setOpen] = useState(true);
-  const issues = lintDocument(doc).filter((i) => i.moduleId === m.id);
+/** 写作建议：只显示当前模块的；点一条会展开对应条目 */
+/**
+ * 模块级写作建议：不属于某个条目的（缺联系方式、「精通」过多……）直接列出；
+ * 属于条目的只给一句汇总，点一下展开第一个有建议的条目——建议本身显示在条目卡片里
+ */
+function WritingTips({ issues, onFocusItem }: { issues: LintIssue[]; onFocusItem: (id: string) => void }) {
   if (issues.length === 0) return null;
-  const items = "items" in m.data ? (m.data.items as ListItem[]) : [];
+  const general = issues.filter((i) => !i.itemId);
+  const onItems = issues.filter((i) => i.itemId);
+  const firstItem = onItems[0]?.itemId;
   return (
-    <section className={`writing-tips${issues.some((i) => i.level === "warn") ? " warn" : ""}`} aria-label="写作建议">
-      <button type="button" className="writing-tips-head" aria-expanded={open} onClick={() => setOpen((x) => !x)}>
-        写作建议 · {issues.length} 条<span>{open ? "收起" : "展开"}</span>
-      </button>
-      {open && (
-        <ul>
-          {issues.map((i, k) => {
-            const it = i.itemId ? items.find((x) => x.id === i.itemId) : undefined;
-            return (
-              <li key={k}>
-                {it && <b>{itemTitle(it)}：</b>}
-                {i.message}
-              </li>
-            );
-          })}
-        </ul>
+    <section className="writing-tips" aria-label="写作建议">
+      {general.map((i, k) => (
+        <p key={k} className={`tip ${i.level}`}>
+          <i aria-hidden="true" />
+          {i.message}
+        </p>
+      ))}
+      {onItems.length > 0 && (
+        <p className="tip">
+          <i aria-hidden="true" />
+          有 {onItems.length} 条写作建议，标在下面对应的条目上。
+          {firstItem && (
+            <button type="button" className="link-btn" onClick={() => onFocusItem(firstItem)}>
+              查看
+            </button>
+          )}
+        </p>
       )}
     </section>
   );
@@ -161,41 +199,86 @@ function SkillsEditor({ doc, module: m, onChange, onRemove }: { doc: RuyeDocumen
   );
 }
 
+/** 条目卡片标题旁的时间，与简历上的写法一致：2026.04 – 2026.07 */
+function itemWhen(it: Record<string, unknown>): string {
+  const f = (v: unknown) => (typeof v === "string" ? v.replace("-", ".") : "");
+  if (typeof it.date === "string") return f(it.date);
+  const a = f(it.start);
+  const b = f(it.end);
+  return a || b ? `${a}${a && b ? " – " : ""}${b}` : "";
+}
+
 function swap<T>(arr: T[], i: number, j: number): T[] {
   const next = [...arr];
   [next[i], next[j]] = [next[j], next[i]];
   return next;
 }
 
-function ItemsEditor({ doc, module: m, onChange, onRemove }: { doc: RuyeDocument; module: ListModule; onChange: (d: RuyeDocument) => void; onRemove: (d: RuyeDocument, what: string) => void }) {
+function ItemsEditor({
+  doc,
+  module: m,
+  issues,
+  onChange,
+  onRemove,
+  open,
+  setOpen,
+}: {
+  doc: RuyeDocument;
+  module: ListModule;
+  issues: LintIssue[];
+  onChange: (d: RuyeDocument) => void;
+  onRemove: (d: RuyeDocument, what: string) => void;
+  open: string | null;
+  setOpen: (id: string | null) => void;
+}) {
   const items = m.data.items as ListItem[];
-  const [open, setOpen] = useState<string | null>(items.length === 1 ? items[0].id : null);
   const patch = (itemId: string, p: Record<string, unknown>) => onChange(updateItem(doc, m.id, itemId, p));
 
   return (
-    <div className="items">
+    <div className="items item-list">
       {items.length === 0 && <p className="hint">还没有条目。</p>}
       {items.map((it, i) => {
         const expanded = open === it.id;
+        const tips = issues.filter((x) => x.itemId === it.id);
+        const when = itemWhen(it as unknown as Record<string, unknown>);
         return (
-          <section key={it.id} className={`item-card${expanded ? " open" : ""}`}>
+          <section key={it.id} id={`item-${it.id}`} className={`item-card${expanded ? " open" : ""}`}>
             <header>
               <button type="button" className="item-toggle" aria-expanded={expanded} onClick={() => setOpen(expanded ? null : it.id)}>
-                <span className="chev">{expanded ? "▾" : "▸"}</span>
-                {itemTitle(it)}
+                <span className="chev" aria-hidden="true" />
+                <span className="item-head-text">
+                  <span className="item-title">{itemTitle(it)}</span>
+                  {(when || tips.length > 0) && (
+                    <span className="item-meta">
+                      {when && <span className="item-when">{when}</span>}
+                      {tips.length > 0 && (
+                        <span className={`item-tip-count${tips.some((t) => t.level === "warn") ? " warn" : ""}`}>{tips.length} 条写作建议</span>
+                      )}
+                    </span>
+                  )}
+                </span>
               </button>
               <div className="row-actions">
                 <button type="button" aria-label="上移条目" disabled={i === 0} onClick={() => onChange(moveItem(doc, m.id, it.id, -1))}>
-                  ↑
+                  <Icon name="up" size={14} />
                 </button>
                 <button type="button" aria-label="下移条目" disabled={i === items.length - 1} onClick={() => onChange(moveItem(doc, m.id, it.id, 1))}>
-                  ↓
+                  <Icon name="down" size={14} />
                 </button>
                 <button type="button" aria-label={`删除 ${itemTitle(it)}`} onClick={() => onRemove(removeItem(doc, m.id, it.id), `「${itemTitle(it)}」`)}>
-                  ×
+                  <Icon name="close" size={14} />
                 </button>
               </div>
             </header>
+            {expanded && tips.length > 0 && (
+              <ul className="item-tips" aria-label="这一条的写作建议">
+                {tips.map((t, k) => (
+                  <li key={k} className={t.level}>
+                    {t.message}
+                  </li>
+                ))}
+              </ul>
+            )}
             {expanded && <div className="form-grid">{itemFields(m.type, it as unknown as Record<string, any>, (p) => patch(it.id, p))}</div>}
           </section>
         );

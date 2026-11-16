@@ -142,6 +142,10 @@ export function TagInput({ label, value, onChange, placeholder }: { label: strin
 }
 
 /** 要点列表：每条一行；回车在下方新增一条，空行按退格删除 */
+/** 单独一行、以冒号结尾的短句是分块小标题（与排版模板的规则一致） */
+const SUBHEAD = /^[^：:，,。；;]{1,12}[：:]\s*$/;
+const LONG_BULLET = 60;
+
 export function BulletList({ label, value, onChange, placeholder }: { label: string; value: string[]; onChange: (v: string[]) => void; placeholder?: string }) {
   const refs = useRef<(HTMLTextAreaElement | null)[]>([]);
   const [focus, setFocus] = useState<number | null>(null);
@@ -157,43 +161,53 @@ export function BulletList({ label, value, onChange, placeholder }: { label: str
     <div className="field-block wide">
       <label>{label}</label>
       <ol className="bullets">
-        {list.map((b, i) => (
-          <li key={i}>
-            <AutoTextarea
-              ariaLabel={`${label}第 ${i + 1} 条`}
-              value={b}
-              placeholder={i === 0 ? placeholder : ""}
-              inputRef={(el) => (refs.current[i] = el)}
-              onChange={(v) => set(i, v.replace(/\n/g, ""))}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                  e.preventDefault();
-                  const next = [...list];
-                  next.splice(i + 1, 0, "");
-                  onChange(next);
-                  setFocus(i + 1);
-                } else if (e.key === "Backspace" && b === "" && list.length > 1) {
-                  e.preventDefault();
-                  onChange(list.filter((_, j) => j !== i));
-                  setFocus(Math.max(0, i - 1));
-                }
-              }}
-            />
-            <div className="row-actions">
-              <button type="button" aria-label="上移这条" disabled={i === 0} onClick={() => onChange(swap(list, i, i - 1))}>
-                ↑
-              </button>
-              <button type="button" aria-label="下移这条" disabled={i === list.length - 1} onClick={() => onChange(swap(list, i, i + 1))}>
-                ↓
-              </button>
-              <button type="button" aria-label="删除这条" onClick={() => onChange(list.filter((_, j) => j !== i))}>
-                ×
-              </button>
-            </div>
-          </li>
-        ))}
+        {list.map((b, i) => {
+          const sub = SUBHEAD.test(b.trim());
+          const n = [...b.trim()].length;
+          return (
+            <li key={i} className={sub ? "subhead" : ""}>
+              <span className="bullet-mark" aria-hidden="true" />
+              <AutoTextarea
+                ariaLabel={`${label}第 ${i + 1} 条`}
+                value={b}
+                placeholder={i === 0 ? placeholder : ""}
+                inputRef={(el) => (refs.current[i] = el)}
+                onChange={(v) => set(i, v.replace(/\n/g, ""))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    const next = [...list];
+                    next.splice(i + 1, 0, "");
+                    onChange(next);
+                    setFocus(i + 1);
+                  } else if (e.key === "Backspace" && b === "" && list.length > 1) {
+                    e.preventDefault();
+                    onChange(list.filter((_, j) => j !== i));
+                    setFocus(Math.max(0, i - 1));
+                  }
+                }}
+              />
+              {!sub && n > LONG_BULLET && (
+                <span className="bullet-count" title="超过 60 字，建议拆成两条">
+                  {n} 字
+                </span>
+              )}
+              <div className="row-actions">
+                <button type="button" aria-label="上移这条" disabled={i === 0} onClick={() => onChange(swap(list, i, i - 1))}>
+                  ↑
+                </button>
+                <button type="button" aria-label="下移这条" disabled={i === list.length - 1} onClick={() => onChange(swap(list, i, i + 1))}>
+                  ↓
+                </button>
+                <button type="button" aria-label="删除这条" onClick={() => onChange(list.filter((_, j) => j !== i))}>
+                  ×
+                </button>
+              </div>
+            </li>
+          );
+        })}
       </ol>
-      <button type="button" className="link-btn" onClick={() => (onChange([...list, ""]), setFocus(list.length))}>
+      <button type="button" className="link-btn add-line" onClick={() => (onChange([...list, ""]), setFocus(list.length))}>
         ＋ 添加一条
       </button>
     </div>

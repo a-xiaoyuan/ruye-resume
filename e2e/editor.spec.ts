@@ -32,12 +32,12 @@ test("修改姓名：标题同步更新，刷新页面后内容仍在", async ({
   await expect(nameField(page)).toHaveValue("端到端测试");
 });
 
-test("切换模板：预览重新排版，摘要卡显示新模板", async ({ page }) => {
-  await page.getByRole("tab", { name: "模板与样式" }).click();
+test("切换模板：预览重新排版，顶栏「外观」显示新模板", async ({ page }) => {
+  await page.getByRole("button", { name: /外观/ }).click();
   await page.getByRole("radio", { name: "时间轴" }).click();
   await ready(page);
-  await page.getByRole("tab", { name: "内容" }).click();
-  await expect(page.locator(".style-summary")).toContainText("时间轴");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".appearance-current")).toHaveText("时间轴");
 });
 
 test("导出 PDF：文件名正确、确实是 PDF", async ({ page }) => {
@@ -64,8 +64,8 @@ test("Markdown 导出后再导入，内容不变", async ({ page }) => {
 });
 
 test("删除模块后可以撤销", async ({ page }) => {
-  await page.getByRole("button", { name: /获奖情况/ }).first().click();
-  await page.getByRole("button", { name: "删除模块" }).click();
+  await page.locator(".module-nav").getByRole("button", { name: /获奖情况/ }).first().click();
+  await page.getByRole("button", { name: "删除模块「获奖情况」" }).click();
   await expect(page.getByText("已删除模块「获奖情况」。")).toBeVisible();
   await page.getByRole("button", { name: "撤销" }).click();
   await expect(page.locator(".module-nav")).toContainText("获奖情况");
@@ -74,5 +74,5 @@ test("删除模块后可以撤销", async ({ page }) => {
 test("空白简历显示写作建议", async ({ page }) => {
   await page.getByRole("button", { name: "文件", exact: true }).click();
   await page.getByRole("menuitem", { name: "新建空白简历" }).click();
-  await expect(page.getByRole("region", { name: "写作建议" })).toContainText("没有留电话或邮箱");
+  await expect(page.getByRole("region", { name: "写作建议" }).filter({ hasText: "没有留电话或邮箱" })).toHaveCount(1);
 });

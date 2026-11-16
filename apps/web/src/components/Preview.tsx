@@ -19,8 +19,9 @@ export function Preview({ data, error, busy, zoom, onZoom }: Props) {
   return (
     <div className="preview-inner">
       <div className="preview-toolbar">
-        <span className={`fit-pill ${fit?.level ?? ""}`} aria-live="polite">
-          {error ? "排版引擎加载失败" : fit ? fit.text : "正在加载排版引擎…"}
+        <span className={`fit-pill ${error ? "error" : (fit?.level ?? "")}`} aria-live="polite" title={fit?.text}>
+          <i aria-hidden="true" />
+          {error ? "排版引擎加载失败" : fit ? fit.short : "正在加载排版引擎…"}
         </span>
         {busy && data && (
           <span className="busy-flag">
@@ -64,6 +65,22 @@ export function Preview({ data, error, busy, zoom, onZoom }: Props) {
           )}
           <div className="board-wrap">
             <div className="board" style={{ aspectRatio: `210 / ${data.boardMm}`, width: `${zoom * 100}%` }}>
+              {/* 四角裁切标记：提醒这是一张真实尺寸的纸，导出的 PDF 与它完全一致 */}
+{/* 稿纸皮肤：把排版结果做成一方印章盖在纸角上（其他皮肤里隐藏） */}
+              {fit && (fit.level === "error" || fit.short.startsWith("已装进")) && (
+                <span className={`fit-sticker ${fit.level}`} aria-hidden="true">
+                  {fit.level === "error" ? "超页" : "一页"}
+                </span>
+              )}
+              <span className="crop tl" aria-hidden="true" />
+              <span className="crop tr" aria-hidden="true" />
+              <span className="crop bl" aria-hidden="true" />
+              <span className="crop br" aria-hidden="true" />
+              {r.status.startsWith("fitted") && (
+                <span className="a4-edge" aria-hidden="true">
+                  297 mm
+                </span>
+              )}
               <div className="svg" dangerouslySetInnerHTML={{ __html: data.svg }} />
               {r.status === "overflow" && (
                 <div className="overflow-zone" style={{ top: `${(A4_HEIGHT_MM / data.boardMm) * 100}%` }}>

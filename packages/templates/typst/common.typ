@@ -159,10 +159,10 @@
 }
 
 // 一行联系方式：图标 + 文字，项与项之间留白；每项内部不断行，便于复制
-#let contact-row(d, color: muted, icon-color: accent) = {
+#let contact-row(d, color: muted, icon-color: accent, sep: h(1.1em)) = {
   let items = contact-items(d)
   if items.len() == 0 { return none }
-  text(size: meta-size, fill: color, items.map(((ic, c)) => box[#icon(ic, color: icon-color) #h(0.15em) #c]).join(h(1.1em)))
+  text(size: meta-size, fill: color, items.map(((ic, c)) => box[#icon(ic, color: icon-color) #h(0.15em) #c]).join(sep))
 }
 
 // 纯文字联系方式（不带图标），用分隔符连接
@@ -309,23 +309,39 @@
 }
 
 // 技术栈：强调色文字、细圆点分隔。打印比底色标签干净，也更省地方
-#let tech-sep = text(fill: hairline.darken(20%))[#h(0.3em)·#h(0.3em)]
-#let tech-text(arr) = text(size: meta-size, fill: accent, arr.map(s => box[#s]).join(tech-sep))
+// 技术栈之间用顿号：中文的列举习惯；换行时落在行尾也自然，不会像圆点那样孤零零挂着
+#let tech-sep = text(fill: ink.lighten(45%))[、]
+// 分隔点并进前一项的盒子里：折行只会发生在点之后，新的一行不会以「·」开头
+#let tech-text(arr) = {
+  let n = arr.len()
+  // 技术栈用正文深灰而不是主色：主色只留给标题、岗位和要点圆点，一页上蓝色太多就看不出重点。
+  // 用户常顺手在最后一项后面打句号，去掉
+  let clean = arr.map(s => s.trim().trim(regex("[。，、；;,.]+"), at: end))
+  text(size: meta-size, fill: ink.lighten(18%), clean.enumerate().map(((i, s)) => box[#s#if i < n - 1 { tech-sep }]).join(h(0pt)))
+}
 
 // 条目标题下的一行：简介（灰）+ 技术栈（强调色）+ 链接（灰）。三者都可缺省，挤不下时自然折行
 #let meta-label(s) = text(size: meta-size, weight: "bold", fill: ink)[#s：]
+// 「标签：内容」一行；内容折行时与第一行内容对齐（悬挂缩进），不顶到左边
+#let labeled(label, body, justify: true) = grid(
+  columns: (auto, 1fr),
+  align: (left + top, left + top),
+  meta-label(label),
+  par(justify: justify, body),
+)
 #let meta-lines(item, url: none, summary-label: "简介") = {
   let out = ()
   let s = get(item, "summary")
   let stack = nonempty(get(item, "techStack"))
   if s != none {
-    out.push(par(justify: true, { meta-label(summary-label); text(size: meta-size, fill: ink)[#s] }))
+    out.push(labeled(summary-label, text(size: meta-size, fill: ink)[#s]))
   }
-  if stack.len() > 0 or url != none {
-    let parts = ()
-    if stack.len() > 0 { parts.push({ meta-label("技术栈"); tech-text(stack) }) }
-    if url != none { parts.push(text(size: meta-size, fill: muted, url-link(url))) }
-    out.push(par(justify: false, parts.join(h(1.2em))))
+  if stack.len() > 0 {
+    let body = tech-text(stack)
+    if url != none { body = { body; h(1.2em); text(size: meta-size, fill: muted, url-link(url)) } }
+    out.push(labeled("技术栈", body, justify: false))
+  } else if url != none {
+    out.push(labeled("链接", text(size: meta-size, fill: muted, url-link(url)), justify: false))
   }
   out
 }
@@ -421,7 +437,7 @@
 #let skill-note(s) = {
   let level = s.match(proficiency-re)
   if level != none {
-    return bullet-of({ text(weight: "bold", fill: accent)[#level.text]; emphasize(s.slice(level.end)) })
+    return bullet-of({ text(weight: "bold")[#level.text]; emphasize(s.slice(level.end)) })
   }
   let key = s.match(note-key-re)
   if key != none and key.end < s.len() {

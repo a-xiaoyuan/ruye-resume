@@ -340,7 +340,23 @@ export function buildSuggestions(doc: RuyeDocument, metrics: LayoutMetrics): str
 }
 
 /** 顶栏溢出指示的文案（说明书 §14） */
-export function describeFit(result: FitResult): { level: "ok" | "warn" | "error"; text: string } {
+/** 预览工具栏只放 short，完整说明 text 放在悬停提示和报告里 */
+export function describeFit(result: FitResult): { level: "ok" | "warn" | "error"; text: string; short: string } {
+  const d = describeFitText(result);
+  const m = result.metrics;
+  const short: Record<FitResult["status"], string> = {
+    "fitted-default": "已装进一页 A4",
+    "fitted-relaxed": "已装进一页 A4",
+    "fitted-tightened": "已装进一页 A4（已自动收紧）",
+    overflow: `超出一页约 ${Math.round(m.overflowMm)} mm`,
+    paginated: `标准分页，共 ${m.pageCount} 页`,
+    continuous: `长一页，约 ${(m.pageHeightMm / A4_HEIGHT_MM).toFixed(2)} 页高`,
+    "too-long": "超过长一页上限",
+  };
+  return { ...d, short: short[result.status] };
+}
+
+function describeFitText(result: FitResult): { level: "ok" | "warn" | "error"; text: string } {
   const m = result.metrics;
   switch (result.status) {
     case "fitted-default":
@@ -348,7 +364,8 @@ export function describeFit(result: FitResult): { level: "ok" | "warn" | "error"
     case "fitted-relaxed":
       return { level: "ok", text: "已装进一页 A4。内容不满一页，已适当放宽间距与行距。" };
     case "fitted-tightened":
-      return { level: "warn", text: `已自动收紧：${result.appliedSteps.map((s) => STEP_LABELS[s]).join(" / ")}。` };
+      // 收紧都在可读性底线之内，结果仍是合格的一页，所以不算警告；只说明收紧了哪些
+      return { level: "ok", text: `已装进一页 A4，自动收紧了${result.appliedSteps.map((s) => STEP_LABELS[s]).join("、")}。` };
     case "overflow": {
       const top = m.moduleHeights[0];
       const where = top ? `占高最多的是「${MODULE_LABELS[top.type as keyof typeof MODULE_LABELS]}」。` : "";

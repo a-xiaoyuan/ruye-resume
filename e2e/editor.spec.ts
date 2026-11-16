@@ -54,8 +54,8 @@ test("Markdown 导出后再导入，内容不变", async ({ page }) => {
   const text = readFileSync(await md.path(), "utf8");
   expect(text).toContain("# 往返测试");
 
-  await page.getByRole("button", { name: "文件", exact: true }).click();
-  await page.getByRole("menuitem", { name: /Go 后端/ }).click();
+  await page.getByRole("button", { name: "我的简历", exact: true }).click();
+  await page.getByRole("button", { name: /Go 后端/ }).click();
   await expect(nameField(page)).toHaveValue("顾远舟");
 
   await page.locator('input[type="file"][accept=".json,.md,.txt"]').setInputFiles({ name: "roundtrip.md", mimeType: "text/markdown", buffer: Buffer.from(text) });
@@ -67,12 +67,59 @@ test("删除模块后可以撤销", async ({ page }) => {
   await page.locator(".module-nav").getByRole("button", { name: /获奖情况/ }).first().click();
   await page.getByRole("button", { name: "删除模块「获奖情况」" }).click();
   await expect(page.getByText("已删除模块「获奖情况」。")).toBeVisible();
-  await page.getByRole("button", { name: "撤销" }).click();
+  await page.locator(".toast").getByRole("button", { name: "撤销" }).click();
   await expect(page.locator(".module-nav")).toContainText("获奖情况");
 });
 
 test("空白简历显示写作建议", async ({ page }) => {
-  await page.getByRole("button", { name: "文件", exact: true }).click();
-  await page.getByRole("menuitem", { name: "新建空白简历" }).click();
+  await page.getByRole("button", { name: "我的简历", exact: true }).click();
+  await page.getByRole("button", { name: "新建空白简历" }).click();
   await expect(page.getByRole("region", { name: "写作建议" }).filter({ hasText: "没有留电话或邮箱" })).toHaveCount(1);
+});
+
+test("粘贴多行要点：自动拆成多条，去掉行首圆点", async ({ page }) => {
+  const project = page.locator("[data-module]").filter({ has: page.getByRole("heading", { name: "项目经历" }) });
+  await project.locator(".item-toggle").first().click();
+  const bullets = project.locator('textarea[aria-label^="做了什么、结果如何第"]');
+  const before = await bullets.count();
+  await bullets.first().evaluate((el) => {
+    const dt = new DataTransfer();
+    dt.setData("text/plain", "• 第一条\n• 第二条\n3. 第三条");
+    (el as HTMLTextAreaElement).setSelectionRange(0, (el as HTMLTextAreaElement).value.length);
+    el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+  });
+  await expect(bullets).toHaveCount(before + 2);
+  await expect(bullets.nth(0)).toHaveValue("第一条");
+  await expect(bullets.nth(2)).toHaveValue("第三条");
+});
+
+test("Ctrl+S 不弹浏览器保存，提示已自动保存", async ({ page }) => {
+  await page.keyboard.press("Control+s");
+  await expect(page.getByText("不用手动保存")).toBeVisible();
+});
+
+test("我的简历：删除进回收站，可以恢复", async ({ page }) => {
+  await nameField(page).fill("回收站测试");
+  await page.getByRole("button", { name: "我的简历", exact: true }).click();
+  // 再新建一份，好删掉「回收站测试」那份
+  await page.getByRole("button", { name: "新建空白简历" }).click();
+  await page.getByRole("button", { name: "我的简历", exact: true }).click();
+  const card = page.locator(".doc-card").filter({ hasText: "回收站测试" });
+  await card.getByRole("button", { name: "删除" }).click();
+  await expect(page.locator(".doc-card").filter({ hasText: "回收站测试" })).toHaveCount(0);
+  await page.getByRole("button", { name: /回收站/ }).click();
+  await page.locator(".plain-list li").filter({ hasText: "回收站测试" }).getByRole("button", { name: "恢复" }).click();
+  await expect(nameField(page)).toHaveValue("回收站测试");
+});
+
+test("撤销与重做：删除条目后 Ctrl+Z 找回，Ctrl+Shift+Z 再删掉", async ({ page }) => {
+  const award = page.locator("[data-module]").filter({ has: page.getByRole("heading", { name: "获奖情况" }) });
+  const before = await award.locator(".item-card").count();
+  await award.locator(".item-card").first().getByRole("button", { name: /^删除 / }).click();
+  await expect(award.locator(".item-card")).toHaveCount(before - 1);
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.keyboard.press("Control+z");
+  await expect(award.locator(".item-card")).toHaveCount(before);
+  await page.keyboard.press("Control+Shift+z");
+  await expect(award.locator(".item-card")).toHaveCount(before - 1);
 });

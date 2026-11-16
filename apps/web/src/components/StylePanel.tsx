@@ -5,7 +5,7 @@ import { Icon } from "./icons.tsx";
 
 // 缩略图由 scripts/thumbs.py 用真实排版生成（同一份完整示例），看到的就是排出来的样子
 const THUMBS = import.meta.glob("../assets/templates/*.png", { eager: true, import: "default" }) as Record<string, string>;
-const thumb = (id: string) => THUMBS[`../assets/templates/${id}.png`];
+export const thumb = (id: string) => THUMBS[`../assets/templates/${id}.png`];
 
 export const MODES: { id: PageMode; short: string; name: string; hint: string }[] = [
   { id: "fit-a4", short: "智能一页", name: "A4 智能一页", hint: "在可读性底线内自动收紧；装不下会明确告诉你超出多少，而不是悄悄打出第 2 页。" },
@@ -101,24 +101,5 @@ export function StylePanel({ doc, onChange }: { doc: RuyeDocument; onChange: (do
       </div>
       <p className="style-note">{mode.hint}</p>
     </section>
-  );
-}
-
-/** 「内容」页顶部的当前样式摘要，点一下切到「模板」页 */
-export function StyleSummary({ doc, onOpen }: { doc: RuyeDocument; onOpen: () => void }) {
-  const meta = templateMeta(doc.layout.templateId);
-  const theme = doc.layout.theme ?? "ink";
-  const mode = MODES.find((m) => m.id === doc.layout.pageMode) ?? MODES[0];
-  return (
-    <button type="button" className="style-summary" onClick={onOpen}>
-      <span className="style-summary-thumb">{thumb(meta.id) ? <img src={thumb(meta.id)} alt="" /> : null}</span>
-      <span className="style-summary-text">
-        <b>{meta.name}</b>
-        <span>
-          {meta.fixedTheme ? "黑白" : THEMES[theme].label} · {mode.short}
-        </span>
-      </span>
-      <span className="style-summary-go">更换</span>
-    </button>
   );
 }

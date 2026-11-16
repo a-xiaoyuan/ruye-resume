@@ -157,6 +157,44 @@ class ApiTest {
     }
 
     @Test
+    void keepsRevisionsAndRestoresFromTrash() throws Exception {
+        String token = register(uniqueEmail());
+        String id = "doc-rev" + UUID.randomUUID().toString().substring(0, 6);
+        putDoc(token, id, null, doc("第一版")).andExpect(status().isOk());
+        putDoc(token, id, 1L, doc("第二版")).andExpect(status().isOk());
+        // 十分钟内再写：不再留档，避免自动同步把历史挤满
+        putDoc(token, id, 2L, doc("第三版")).andExpect(status().isOk());
+
+        mvc.perform(get("/api/resumes/" + id + "/revisions").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].current").value(true))
+                .andExpect(jsonPath("$[0].title").value("第三版"))
+                .andExpect(jsonPath("$[1].version").value(1))
+                .andExpect(jsonPath("$[1].title").value("第一版"));
+        mvc.perform(get("/api/resumes/" + id + "/revisions/1").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.doc.meta.title").value("第一版"));
+
+        // 删除前总会留档：回收站里还能看到删除时的内容，并按原 id 恢复
+        mvc.perform(delete("/api/resumes/" + id + "?baseVersion=3").header("Authorization", "Bearer " + token)).andExpect(status().isOk());
+        mvc.perform(get("/api/resumes/" + id + "/revisions").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].current").value(false))
+                .andExpect(jsonPath("$[0].version").value(3))
+                .andExpect(jsonPath("$[0].title").value("第三版"));
+        putDoc(token, id, null, doc("第三版")).andExpect(status().isOk());
+        mvc.perform(get("/api/resumes/" + id).header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.doc.meta.title").value("第三版"));
+
+        // 别人看不到这份简历的历史
+        String other = register(uniqueEmail());
+        mvc.perform(get("/api/resumes/" + id + "/revisions").header("Authorization", "Bearer " + other)).andExpect(status().isNotFound());
+        mvc.perform(get("/api/resumes/" + id + "/revisions/1").header("Authorization", "Bearer " + other)).andExpect(status().isNotFound());
+    }
+
+    @Test
     void usersCannotSeeEachOthersResumes() throws Exception {
         String alice = register(uniqueEmail());
         String bob = register(uniqueEmail());

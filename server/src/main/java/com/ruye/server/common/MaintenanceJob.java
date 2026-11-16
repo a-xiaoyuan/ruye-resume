@@ -13,6 +13,7 @@ import com.ruye.server.auth.PasswordResetTokenRepository;
 import com.ruye.server.auth.RefreshTokenRepository;
 import com.ruye.server.config.RuyeProperties;
 import com.ruye.server.resume.ResumeRepository;
+import com.ruye.server.resume.ResumeRevisionRepository;
 
 /** 每天凌晨清理：软删除超过保留期的简历、过期或已作废的令牌 */
 @Component
@@ -23,12 +24,14 @@ public class MaintenanceJob {
     private static final Duration REVOKED_KEEP = Duration.ofDays(7);
 
     private final ResumeRepository resumes;
+    private final ResumeRevisionRepository revisions;
     private final RefreshTokenRepository refreshTokens;
     private final PasswordResetTokenRepository resetTokens;
     private final RuyeProperties props;
 
-    public MaintenanceJob(ResumeRepository resumes, RefreshTokenRepository refreshTokens, PasswordResetTokenRepository resetTokens, RuyeProperties props) {
+    public MaintenanceJob(ResumeRepository resumes, ResumeRevisionRepository revisions, RefreshTokenRepository refreshTokens, PasswordResetTokenRepository resetTokens, RuyeProperties props) {
         this.resumes = resumes;
+        this.revisions = revisions;
         this.refreshTokens = refreshTokens;
         this.resetTokens = resetTokens;
         this.props = props;
@@ -38,7 +41,9 @@ public class MaintenanceJob {
     @Transactional
     public void purge() {
         Instant now = Instant.now();
-        int r = resumes.purgeDeleted(now.minus(Duration.ofDays(props.retention().deletedResumeDays())));
+        Instant before = now.minus(Duration.ofDays(props.retention().deletedResumeDays()));
+        revisions.purgeForDeleted(before);
+        int r = resumes.purgeDeleted(before);
         int t = refreshTokens.purge(now, now.minus(REVOKED_KEEP));
         int p = resetTokens.purge(now);
         log.info("定时清理：简历 {} 份，刷新令牌 {} 个，重置令牌 {} 个", r, t, p);

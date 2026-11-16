@@ -1,12 +1,11 @@
 // 界面皮肤：只换编辑器的外观，不影响简历本身（简历的样子由「外观」里的模板决定）
 import type { ModuleType } from "../../../packages/schema/src/index.ts";
 
-export type Skin = "paper" | "terminal" | "manuscript";
+export type Skin = "paper" | "terminal";
 
 export const SKINS: { key: Skin; label: string; hint: string }[] = [
-  { key: "paper", label: "纸感", hint: "浅色，安静" },
-  { key: "terminal", label: "终端", hint: "深色，等宽字体" },
-  { key: "manuscript", label: "稿纸", hint: "绿格稿纸，朱笔批注" },
+  { key: "paper", label: "浅色", hint: "整篇连着写" },
+  { key: "terminal", label: "深色终端", hint: "一次打开一个模块" },
 ];
 
 const KEY = "ruye.skin";
@@ -14,8 +13,7 @@ const KEY = "ruye.skin";
 export function loadSkin(): Skin {
   try {
     const v = localStorage.getItem(KEY);
-    if (v === "brutal") return "manuscript"; // 旧的「撞色」已换成「稿纸」
-    return v === "terminal" || v === "manuscript" ? v : "paper";
+    return v === "terminal" ? v : "paper";
   } catch {
     return "paper";
   }

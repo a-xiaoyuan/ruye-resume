@@ -15,6 +15,7 @@ import com.ruye.server.common.Tokens;
 import com.ruye.server.config.RuyeProperties;
 import com.ruye.server.ratelimit.RateLimiter;
 import com.ruye.server.resume.ResumeRepository;
+import com.ruye.server.resume.ResumeRevisionRepository;
 
 @Service
 public class AuthService {
@@ -30,11 +31,12 @@ public class AuthService {
     private final PasswordResetTokenRepository resetTokens;
     private final RefreshTokenRepository refreshTokens;
     private final ResumeRepository resumes;
+    private final ResumeRevisionRepository revisions;
     private final ResetMailer mailer;
 
     public AuthService(UserAccountRepository users, PasswordEncoder passwordEncoder, TokenService tokens, LoginThrottle throttle,
                        RateLimiter limiter, RuyeProperties props, PasswordResetTokenRepository resetTokens,
-                       RefreshTokenRepository refreshTokens, ResumeRepository resumes, ResetMailer mailer) {
+                       RefreshTokenRepository refreshTokens, ResumeRepository resumes, ResumeRevisionRepository revisions, ResetMailer mailer) {
         this.users = users;
         this.passwordEncoder = passwordEncoder;
         this.tokens = tokens;
@@ -44,6 +46,7 @@ public class AuthService {
         this.resetTokens = resetTokens;
         this.refreshTokens = refreshTokens;
         this.resumes = resumes;
+        this.revisions = revisions;
         this.mailer = mailer;
     }
 
@@ -141,6 +144,7 @@ public class AuthService {
         if (!passwordEncoder.matches(password, u.getPasswordHash())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "bad_password", "密码不正确，账号没有被注销");
         }
+        revisions.deleteAllByOwner(userId);
         resumes.deleteAllByOwner(userId);
         refreshTokens.deleteAllForUser(userId);
         resetTokens.deleteAllForUser(userId);

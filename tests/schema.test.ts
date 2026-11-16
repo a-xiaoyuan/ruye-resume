@@ -7,6 +7,8 @@ import {
   exportBaseName,
   fromMarkdown,
   isSafeUrl,
+  THEME_IDS,
+  THEMES,
   normalizeDate,
   renderableModules,
   toMarkdown,
@@ -16,7 +18,7 @@ import {
 
 const load = (name: string): RuyeDocument => JSON.parse(readFileSync(new URL(`../fixtures/${name}.ruye.json`, import.meta.url), "utf8"));
 
-for (const name of ["short", "medium", "long"]) {
+for (const name of ["full", "short", "medium", "long"]) {
   test(`fixture ${name} 通过校验`, () => {
     const r = validateDocument(load(name));
     assert.ok(r.ok, r.ok ? "" : JSON.stringify(r.issues, null, 2));
@@ -200,4 +202,85 @@ test("Markdown 往返保留照片；远程图片与放错位置的图片给出�
   assert.ok(info.type === "basic_info" && info.data.photoDataUrl === undefined && info.data.phone === "1");
   const proj = remote.doc.modules.find((m) => m.type === "project");
   assert.ok(proj && proj.type === "project" && proj.data.items[0].bullets.length === 1);
+});
+
+test("专业技能：描述句与分类可以混用，Markdown 往返不混淆", () => {
+  const doc = load("long");
+  const skills = doc.modules.find((m) => m.type === "skills");
+  assert.ok(skills && skills.type === "skills" && (skills.data.notes ?? []).length === 3);
+  // 带冒号的描述句（「JVM：……」）导出后不能被当成分类
+  const back = fromMarkdown(toMarkdown(doc));
+  assert.deepEqual(back.warnings, []);
+  const s2 = back.doc.modules.find((m) => m.type === "skills");
+  assert.ok(s2 && s2.type === "skills");
+  assert.deepEqual(s2.data.notes, skills.data.notes);
+  assert.deepEqual(s2.data.categories.map((c) => [c.name, c.items]), skills.data.categories.map((c) => [c.name, c.items]));
+});
+
+test("专业技能：旧版 Markdown（分类名不加粗）仍能正确区分分类与描述句", () => {
+  const { doc } = fromMarkdown("# 张三\n\n## 专业技能\n- 语言：Java、Python\n- 框架：Spring Boot、MyBatis\n- 熟悉 JVM 内存模型\n- Java 基础：熟悉集合，理解 AQS\n");
+  const s = doc.modules.find((m) => m.type === "skills");
+  assert.ok(s && s.type === "skills");
+  assert.deepEqual(s.data.categories.map((c) => c.name), ["语言", "框架"]);
+  assert.deepEqual(s.data.notes, ["熟悉 JVM 内存模型", "Java 基础：熟悉集合，理解 AQS"]);
+});
+
+test("专业技能：只有描述句也算有内容；描述句必须是字符串", () => {
+  const doc = load("short");
+  const s = doc.modules.find((m) => m.type === "skills")!;
+  if (s.type !== "skills") return;
+  s.data = { categories: [], notes: ["熟悉 Java"] };
+  assert.ok(renderableModules(doc).some((m) => m.type === "skills"));
+  assert.ok(validateDocument(doc).ok);
+  s.data = { categories: [], notes: ["  "] };
+  assert.ok(!renderableModules(doc).some((m) => m.type === "skills"));
+  (s.data as any).notes = [1];
+  const r = validateDocument(doc);
+  assert.equal(r.ok, false);
+  if (!r.ok) assert.ok(r.issues.some((i) => i.path.endsWith(".notes[0]")));
+});
+
+test("主题色：schema 与 Typst 色板一致（6 个主题的主色、辅色）", () => {
+  const typ = readFileSync(new URL("../packages/templates/typst/common.typ", import.meta.url), "utf8");
+  for (const id of THEME_IDS) {
+    const m = typ.match(new RegExp(`\\b${id}: \\(primary: rgb\\("(#[0-9a-f]{6})"\\), secondary: rgb\\("(#[0-9a-f]{6})"\\)`));
+    assert.ok(m, `common.typ 缺少主题 ${id}`);
+    assert.equal(m[1], THEMES[id].accent, `${id} 主色`);
+    assert.equal(m[2], THEMES[id].secondary, `${id} 辅色`);
+  }
+});
+
+test("完整示例：小标题、句首短标题、自我评价经 Markdown 往返不丢失", () => {
+  const doc = load("full");
+  const back = fromMarkdown(toMarkdown(doc));
+  assert.deepEqual(back.warnings, []);
+  assert.equal(back.doc.layout.templateId, "classic");
+  const p1 = doc.modules.find((m) => m.type === "project")!;
+  const p2 = back.doc.modules.find((m) => m.type === "project")!;
+  assert.ok(p1.type === "project" && p2.type === "project");
+  assert.deepEqual(p2.data.items.map((i) => i.bullets), p1.data.items.map((i) => i.bullets));
+  assert.deepEqual(p2.data.items.map((i) => i.summary), p1.data.items.map((i) => i.summary));
+  const s1 = doc.modules.find((m) => m.type === "summary")!;
+  const s2 = back.doc.modules.find((m) => m.type === "summary")!;
+  assert.ok(s1.type === "summary" && s2.type === "summary");
+  assert.equal(s2.data.text, s1.data.text);
+});
+
+test("自我评价：空白不算内容；text 必须是字符串；「个人评价」「项目简介」等别名可导入", () => {
+  const doc = load("full");
+  const s = doc.modules.find((m) => m.type === "summary")!;
+  if (s.type !== "summary") return;
+  s.data.text = "  \n ";
+  assert.ok(!renderableModules(doc).some((m) => m.type === "summary"));
+  (s.data as any).text = 3;
+  assert.equal(validateDocument(doc).ok, false);
+  const { doc: d, warnings } = fromMarkdown("# 张三\n\n## 项目经历\n### 某系统 | 后端\n- 项目简介：一个系统\n- 个人职责：\n- 写接口\n\n## 个人评价\n踏实\n肯干\n");
+  assert.deepEqual(warnings, []);
+  const p = d.modules.find((m) => m.type === "project")!;
+  assert.ok(p.type === "project");
+  assert.equal(p.data.items[0].summary, "一个系统");
+  assert.deepEqual(p.data.items[0].bullets, ["个人职责：", "写接口"]);
+  const sm = d.modules.find((m) => m.type === "summary")!;
+  assert.ok(sm.type === "summary");
+  assert.equal(sm.data.text, "踏实\n肯干");
 });

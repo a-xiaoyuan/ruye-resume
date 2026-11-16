@@ -1,0 +1,49 @@
+name: 在线 Demo
+
+# 推送到 main 时构建并发布到 GitHub Pages：https://<用户名>.github.io/ruye-resume/
+# 首次使用前，在仓库 Settings → Pages → Build and deployment → Source 选「GitHub Actions」。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时间只保留一次发布，新的推送会取消还没跑完的旧发布
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile=false
+      # 子集字体（5.6MB）；没有 fonttools 会退回 27.6MB 的完整字体
+      - run: pip install fonttools
+      - run: pnpm fonts
+      # 黄金测试不过就不发布
+      - run: pnpm test
+      - run: pnpm build
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: apps/web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

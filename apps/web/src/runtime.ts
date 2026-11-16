@@ -6,11 +6,14 @@ import { initTypst, LayoutEngine, TypstSnippetBackend, type TemplateDef } from "
 import { createTemplates } from "../../../packages/templates/src/index.ts";
 import type { TemplateId } from "../../../packages/schema/src/index.ts";
 import common from "../../../packages/templates/typst/common.typ?raw";
+import classic from "../../../packages/templates/typst/classic.typ?raw";
+import minimal from "../../../packages/templates/typst/minimal.typ?raw";
+import elegant from "../../../packages/templates/typst/elegant.typ?raw";
+import timeline from "../../../packages/templates/typst/timeline.typ?raw";
 import campusSerif from "../../../packages/templates/typst/campus-serif.typ?raw";
 import socialSans from "../../../packages/templates/typst/social-sans.typ?raw";
 import splitCompact from "../../../packages/templates/typst/split-compact.typ?raw";
 
-const BASE = import.meta.env.BASE_URL;
 const FONT_FILES = ["NotoSansSC-Regular.otf", "NotoSansSC-Bold.otf", "NotoSerifSC-Bold.otf"];
 
 export interface Runtime {
@@ -28,7 +31,12 @@ async function fetchBytes(url: string): Promise<Uint8Array> {
 
 let pending: Promise<Runtime> | null = null;
 
-export function loadRuntime(): Promise<Runtime> {
+/**
+ * base：站点根目录的绝对地址（以 / 结尾）。在 Worker 里相对路径是相对 Worker 脚本解析的，
+ * 而不是相对页面，所以由主线程算好绝对地址传进来。
+ */
+export function loadRuntime(base: string): Promise<Runtime> {
+  const BASE = base.endsWith("/") ? base : `${base}/`;
   pending ??= (async () => {
     const [fonts, charset] = await Promise.all([
       Promise.all(FONT_FILES.map((f) => fetchBytes(`${BASE}fonts/${f}`))),
@@ -41,7 +49,7 @@ export function loadRuntime(): Promise<Runtime> {
     });
     return {
       engine: new LayoutEngine(new TypstSnippetBackend($typst)),
-      templates: createTemplates({ common, "campus-serif": campusSerif, "social-sans": socialSans, "split-compact": splitCompact }),
+      templates: createTemplates({ common, classic, minimal, elegant, timeline, "campus-serif": campusSerif, "social-sans": socialSans, "split-compact": splitCompact }),
       charset,
     };
   })();

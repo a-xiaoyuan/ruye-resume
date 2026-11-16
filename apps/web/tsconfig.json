@@ -11,5 +11,6 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true
   },
-  "include": ["src", "../../packages/*/src"]
+  "include": ["src", "../../packages/*/src"],
+  "exclude": ["../../packages/templates/src/node.ts"]
 }

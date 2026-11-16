@@ -4,7 +4,7 @@
 import { before, describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import type { RuyeDocument } from "../packages/schema/src/index.ts";
+import { THEME_IDS, type RuyeDocument } from "../packages/schema/src/index.ts";
 import { A4_HEIGHT_MM, countPdfPages, findMissingChars, LayoutEngine, parseSvgPages, parseSvgSize, pdfPageHeightsMm, PT_PER_MM, READABILITY_FLOOR } from "../packages/engine/src/index.ts";
 import { loadNodeTemplates } from "../packages/templates/src/node.ts";
 import { loadCharset, loadNodeTypst } from "../scripts/typst-node.ts";
@@ -33,7 +33,7 @@ describe("Typst 黄金测试", { skip }, () => {
 
   test("短样本 + fit-a4：一页，无溢出", async () => {
     const r = await engine.fitA4(load("short"), template);
-    assert.ok(r.status === "fitted-default" || r.status === "fitted-tightened", r.status);
+    assert.ok(r.status === "fitted-default" || r.status === "fitted-relaxed" || r.status === "fitted-tightened", r.status);
     assert.equal(r.metrics.pageCount, 1);
     assert.equal(r.metrics.overflowMm, 0);
     const pdf = await engine.pdf(load("short"), template, r.tokens, r.pageHeight);
@@ -106,14 +106,14 @@ describe("Typst 黄金测试", { skip }, () => {
   });
 
   test("示例数据不缺字", () => {
-    for (const name of ["short", "medium", "long"]) assert.deepEqual(findMissingChars(load(name), loadCharset()), []);
+    for (const name of ["full", "short", "medium", "long"]) assert.deepEqual(findMissingChars(load(name), loadCharset()), []);
   });
 
-  for (const id of ["social-sans", "split-compact"] as const) {
+  for (const id of ["classic", "minimal", "elegant", "timeline", "social-sans", "split-compact"] as const) {
     test(`${id}：短样本一页、长样本 continuous 一页、带照片和主题色可编译`, async () => {
       const t = templates.get(id)!;
       const short = await engine.fitA4(load("short"), t);
-      assert.ok(short.status === "fitted-default" || short.status === "fitted-tightened", short.status);
+      assert.ok(short.status === "fitted-default" || short.status === "fitted-relaxed" || short.status === "fitted-tightened", short.status);
       assert.equal(short.metrics.pageCount, 1);
       const long = await engine.continuous(load("long"), t);
       assert.equal(long.status, "continuous");
@@ -129,13 +129,43 @@ describe("Typst 黄金测试", { skip }, () => {
     });
   }
 
-  test("campus-serif：带照片、四种主题色都能编译", async () => {
-    for (const theme of ["ink", "teal", "wine", "graphite"] as const) {
+  test("完整示例在所有模板下都能装进一页 A4，且至多收紧到行距这一步", async () => {
+    for (const t of templates.values()) {
+      const r = await engine.fitA4(load("full"), t);
+      assert.ok(r.status === "fitted-default" || r.status === "fitted-relaxed" || r.status === "fitted-tightened", `${t.id}: ${r.status}`);
+      assert.equal(r.metrics.pageCount, 1, t.id);
+      if (t.id === "classic") assert.ok(!r.appliedSteps.includes("font-size"), `classic 不应缩字号：${r.appliedSteps.join(",")}`);
+    }
+  });
+
+  test("极简模板固定黑白色板：换主题色不改变输出", async () => {
+    const t = templates.get("minimal")!;
+    const a = load("full");
+    const b = load("full");
+    a.layout.theme = "ink";
+    b.layout.theme = "wine";
+    assert.equal(await engine.svg(a, t, t.defaultTokens, A4_HEIGHT_MM), await engine.svg(b, t, t.defaultTokens, A4_HEIGHT_MM));
+  });
+
+  test("要点小标题、句首短标题与自我评价都能排版；只有小标题的要点也不报错", async () => {
+    const doc = load("full");
+    const p = doc.modules.find((m) => m.type === "project")!;
+    if (p.type === "project") p.data.items[0].bullets = ["个人职责：", "技术亮点：", "缓存：", "：只有冒号", "#*$ 带特殊字符的短标题：说明"];
+    const s = doc.modules.find((m) => m.type === "summary")!;
+    if (s.type === "summary") s.data.text = "第一段\n\n第二段 #*$<x>";
+    for (const t of templates.values()) {
+      const svg = await engine.svg(doc, t, t.defaultTokens, A4_HEIGHT_MM);
+      assert.ok(svg.includes("typst-doc"), t.id);
+    }
+  });
+
+  test("所有模板 × 六种主题色 × 带照片都能编译", async () => {
+    for (const t of templates.values()) for (const theme of THEME_IDS) {
       const doc = load("short");
       doc.layout.theme = theme;
       if (doc.modules[0].type === "basic_info") doc.modules[0].data.photoDataUrl = PHOTO;
-      const svg = await engine.svg(doc, template, template.defaultTokens, A4_HEIGHT_MM);
-      assert.ok(svg.includes("typst-doc"), theme);
+      const svg = await engine.svg(doc, t, t.defaultTokens, A4_HEIGHT_MM);
+      assert.ok(svg.includes("typst-doc"), `${t.id}/${theme}`);
     }
   });
 
@@ -148,7 +178,7 @@ describe("Typst 黄金测试", { skip }, () => {
     }
   });
 
-  test("真实页码：三套模板 × 三份样本 × 三种模式，PDF 自身的页数与高度都和排版结果一致", async () => {
+  test("真实页码：所有模板 × 三份样本 × 三种模式，PDF 自身的页数与高度都和排版结果一致", async () => {
     for (const t of templates.values()) {
       for (const name of ["short", "medium", "long"]) {
         for (const mode of ["standard", "fit-a4", "continuous"] as const) {
@@ -198,6 +228,27 @@ describe("Typst 黄金测试", { skip }, () => {
       // 文字本身照常显示；不允许的是带 javascript: 的可点击链接
       assert.ok(!/href\s*=\s*["']\s*javascript:/i.test(svg), t.id);
       assert.ok(svg.includes('href="https://example.com/me"'), t.id);
+    }
+  });
+
+  test("专业技能只有描述句、或分类与描述句混用时，所有模板都能排版", async () => {
+    for (const notesOnly of [true, false]) {
+      const doc = load("short");
+      const s = doc.modules.find((m) => m.type === "skills")!;
+      if (s.type === "skills") {
+        s.data = {
+          categories: notesOnly ? [] : s.data.categories,
+          notes: ["熟悉 Java 并发编程，理解 AQS", "JVM：了解 GC 调优", "能够独立完成接口设计与压测", "带 # * $ <x> 的描述句"],
+        };
+      }
+      for (const t of templates.values()) {
+        for (const mode of ["fit-a4", "standard", "continuous"] as const) {
+          const r = await engine.layout(doc, t, mode);
+          assert.ok(r.status !== "too-long", `${t.id}/${mode}`);
+          const svg = await engine.svg(doc, t, r.tokens, r.pageHeight);
+          assert.ok(svg.includes(">JVM<") || svg.includes("JVM"), `${t.id}/${mode} 描述句没有排出来`);
+        }
+      }
     }
   });
 

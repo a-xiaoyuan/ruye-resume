@@ -153,6 +153,106 @@ function readForMerge(id: string): { ok: true; others: Record<string, unknown>[]
   return { ok: true, others: list.filter((x): x is Record<string, unknown> => isObj(x) && x.id !== id) };
 }
 
+// ---------------------------------------------------------------- 多份简历
+
+export interface DocSummary {
+  id: string;
+  /** 列表里显示的名字：备注名优先，其次是「姓名-求职意向」 */
+  label: string;
+  title: string;
+  alias?: string;
+  templateId: string;
+  updatedAt: string;
+  /** 有格式问题、但内容可恢复的草稿 */
+  issueCount: number;
+}
+
+/** 生成新简历的存档 id */
+export function newDocumentId(): string {
+  return `doc-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+}
+
+function readList(): { ok: true; list: unknown[] } | { ok: false; message: string } {
+  let raw: string | null;
+  try {
+    raw = localStorage.getItem(DOCS_KEY);
+  } catch (e) {
+    return { ok: false, message: `无法读取本地存档（${(e as Error).message}）` };
+  }
+  if (raw === null || raw === "") return { ok: true, list: [] };
+  try {
+    const list = JSON.parse(raw);
+    return Array.isArray(list) ? { ok: true, list } : { ok: false, message: "本地存档格式无法识别" };
+  } catch {
+    return { ok: false, message: "本地存档不是合法 JSON" };
+  }
+}
+
+/** 列出所有能打开的简历，按最近使用排序（保存时当前简历排在最前）。读不出的条目跳过，但不删除 */
+export function listDocuments(): DocSummary[] {
+  const r = readList();
+  if (!r.ok) return [];
+  const out: DocSummary[] = [];
+  for (const item of r.list) {
+    if (!isObj(item) || typeof item.id !== "string" || item.id === "" || !("doc" in item)) continue;
+    const rec = recoverDocument(item.doc);
+    if (!rec) continue;
+    const { meta, layout } = rec.doc;
+    const alias = typeof meta.alias === "string" && meta.alias.trim() !== "" ? meta.alias.trim() : undefined;
+    out.push({ id: item.id, label: alias ?? meta.title, title: meta.title, alias, templateId: layout.templateId, updatedAt: meta.updatedAt, issueCount: rec.issues.length });
+  }
+  return out;
+}
+
+/** 打开指定简历；不存在或无法恢复时返回 null */
+export function loadDocument(id: string): { doc: RuyeDocument; issues: ValidationIssue[] } | null {
+  const r = readList();
+  if (!r.ok) return null;
+  const item = r.list.find((x) => isObj(x) && x.id === id);
+  if (!item || !isObj(item) || !("doc" in item)) return null;
+  return recoverDocument(item.doc);
+}
+
+/** 记住当前打开的是哪一份（下次打开编辑器时恢复它） */
+export function setCurrentId(id: string): void {
+  try {
+    localStorage.setItem(CURRENT_KEY, id);
+  } catch {
+    // 记不住当前文档不影响内容本身，忽略
+  }
+}
+
+/**
+ * 写入（或新增）一份简历，不改变「当前打开」的是哪一份，也不改变列表顺序（新增的排在最后）。
+ * 云同步拉取时用。存档读不出来时拒绝写入，返回错误信息
+ */
+export function putDocument(id: string, doc: RuyeDocument): string | null {
+  const r = readList();
+  if (!r.ok) return `写入失败：${r.message}。未写入，以免覆盖。`;
+  const list = r.list.slice();
+  const i = list.findIndex((x) => isObj(x) && x.id === id);
+  if (i >= 0) list[i] = { id, doc };
+  else list.push({ id, doc });
+  try {
+    localStorage.setItem(DOCS_KEY, JSON.stringify(list));
+    return null;
+  } catch (e) {
+    return `写入失败：${(e as Error).message}`;
+  }
+}
+
+/** 删除一份简历。存档读不出来时拒绝写入，返回错误信息 */
+export function deleteDocument(id: string): string | null {
+  const r = readList();
+  if (!r.ok) return `删除失败：${r.message}。未写入，以免覆盖。`;
+  try {
+    localStorage.setItem(DOCS_KEY, JSON.stringify(r.list.filter((x) => !(isObj(x) && x.id === id))));
+    return null;
+  } catch (e) {
+    return `删除失败：${(e as Error).message}`;
+  }
+}
+
 export function download(name: string, data: BlobPart, type: string): void {
   const url = URL.createObjectURL(new Blob([data], { type }));
   const a = document.createElement("a");

@@ -7,14 +7,15 @@ import { BulletList, DateField, PhotoField, TagInput, TextArea, TextField } from
 const MODULE_HINTS: Record<string, string> = {
   basic_info: "姓名 + 求职意向会拼成文档标题。照片只在本机处理，不会上传。",
   job_intention: "岗位与城市写具体；期望薪资一般不建议写。",
-  skills: "按类别列出，如「语言」「框架」「中间件」，每类回车添加一项。",
+  skills: "两种写法：分类列表适合列技术栈，描述句适合写掌握深度。可以只用一种，也可以混用。",
   education: "校招建议把教育放在前面；亮点写 GPA、专业排名、奖学金。",
-  work: "每条要点尽量是「动作 + 技术 + 可量化结果」。",
-  internship: "实习经历按时间倒序；技术栈用标签，回车添加。",
-  project: "突出你负责的部分和结果，链接放可访问的仓库或演示地址。",
+  work: "每条要点尽量是「动作 + 技术 + 可量化结果」。要点里单独一行写「个人职责：」「技术亮点：」会成为分块小标题；「缓存优化：……」会加粗冒号前的短标题。",
+  internship: "实习经历按时间倒序；技术栈用标签，回车添加。要点里单独一行写「个人职责：」「技术亮点：」会成为分块小标题；「缓存优化：……」会加粗冒号前的短标题。",
+  project: "突出你负责的部分和结果，链接放可访问的仓库或演示地址。要点里单独一行写「个人职责：」「技术亮点：」会成为分块小标题；「缓存优化：……」会加粗冒号前的短标题。",
   research: "写清课题、你的分工与产出。",
   paper: "期刊 / 会议与日期尽量写全。",
   award: "只放与目标岗位相关、有区分度的奖项。",
+  summary: "1～3 句，写和岗位相关、有事实支撑的特质，例如「坚持写技术博客，累计 40 篇」。换行分段。",
 };
 
 interface Props {
@@ -65,6 +66,15 @@ export function ModuleEditor({ doc, module: m, onChange, onRemove, onError, onRe
         </div>
       )}
 
+      {m.type === "summary" && (
+        <TextArea
+          label="自我评价"
+          value={m.data.text}
+          onChange={(v) => patchData({ text: v })}
+          placeholder="对高并发场景有持续兴趣，实习中独立排查过两次线上慢查询，习惯把排查过程整理成文档。"
+        />
+      )}
+
       {m.type === "skills" && <SkillsEditor doc={doc} module={m} onChange={onChange} onRemove={onRemove} />}
 
       {"items" in m.data && <ItemsEditor doc={doc} module={m as ListModule} onChange={onChange} onRemove={onRemove} />}
@@ -73,31 +83,51 @@ export function ModuleEditor({ doc, module: m, onChange, onRemove, onError, onRe
 }
 
 function SkillsEditor({ doc, module: m, onChange, onRemove }: { doc: RuyeDocument; module: Extract<Module, { type: "skills" }>; onChange: (d: RuyeDocument) => void; onRemove: (d: RuyeDocument, what: string) => void }) {
-  const set = (categories: SkillCategory[]) => replaceModule(doc, m.id, (x) => ({ ...x, data: { categories } }) as Module);
   const cats = m.data.categories;
+  const notes = m.data.notes ?? [];
+  // 两种写法互不影响：改分类时保留描述句，改描述句时保留分类
+  const write = (patch: { categories?: SkillCategory[]; notes?: string[] }) =>
+    replaceModule(doc, m.id, (x) => ({ ...x, data: { ...(x.data as typeof m.data), ...patch } }) as Module);
+  const set = (categories: SkillCategory[]) => write({ categories });
   return (
     <div className="items">
-      <p className="hint">按类别列出，如「语言」「框架」「中间件」。每类回车添加一项。</p>
-      {cats.map((c, i) => (
-        <div key={c.id} className="skill-row">
-          <input aria-label="类别名" className="skill-name" value={c.name} placeholder="类别" onChange={(e) => onChange(set(cats.map((x) => (x.id === c.id ? { ...x, name: e.target.value } : x))))} />
-          <TagInput label="" value={c.items} onChange={(items) => onChange(set(cats.map((x) => (x.id === c.id ? { ...x, items } : x))))} />
-          <div className="row-actions">
-            <button type="button" aria-label="上移类别" disabled={i === 0} onClick={() => onChange(set(swap(cats, i, i - 1)))}>
-              ↑
-            </button>
-            <button type="button" aria-label="下移类别" disabled={i === cats.length - 1} onClick={() => onChange(set(swap(cats, i, i + 1)))}>
-              ↓
-            </button>
-            <button type="button" aria-label={`删除类别 ${c.name}`} onClick={() => onRemove(set(cats.filter((x) => x.id !== c.id)), `技能类别「${c.name || "未命名"}」`)}>
-              ×
-            </button>
+      <section className="skill-section">
+        <h3>分类列表</h3>
+        <p className="hint">适合列技术栈：「语言」「框架」「中间件」各一行，每类回车添加一项。</p>
+        {cats.map((c, i) => (
+          <div key={c.id} className="skill-row">
+            <input aria-label="类别名" className="skill-name" value={c.name} placeholder="类别" onChange={(e) => onChange(set(cats.map((x) => (x.id === c.id ? { ...x, name: e.target.value } : x))))} />
+            <TagInput label="" value={c.items} onChange={(items) => onChange(set(cats.map((x) => (x.id === c.id ? { ...x, items } : x))))} />
+            <div className="row-actions">
+              <button type="button" aria-label="上移类别" disabled={i === 0} onClick={() => onChange(set(swap(cats, i, i - 1)))}>
+                ↑
+              </button>
+              <button type="button" aria-label="下移类别" disabled={i === cats.length - 1} onClick={() => onChange(set(swap(cats, i, i + 1)))}>
+                ↓
+              </button>
+              <button type="button" aria-label={`删除类别 ${c.name}`} onClick={() => onRemove(set(cats.filter((x) => x.id !== c.id)), `技能类别「${c.name || "未命名"}」`)}>
+                ×
+              </button>
+            </div>
           </div>
-        </div>
-      ))}
-      <button type="button" className="add-btn" onClick={() => onChange(set([...cats, { id: newId("skill"), name: "", items: [] }]))}>
-        ＋ 添加技能类别
-      </button>
+        ))}
+        <button type="button" className="add-btn" onClick={() => onChange(set([...cats, { id: newId("skill"), name: "", items: [] }]))}>
+          ＋ 添加技能类别
+        </button>
+      </section>
+
+      <section className="skill-section">
+        <h3>描述句</h3>
+        <p className="hint">
+          每行一句，写清楚掌握到什么程度。句首的「精通 / 熟悉 / 了解」会自动加粗；写成「JVM：……」会加粗冒号前的关键词。排在分类列表之后。
+        </p>
+        <BulletList
+          label="描述句"
+          value={notes}
+          onChange={(v) => onChange(write({ notes: v }))}
+          placeholder="熟悉 Java 集合与并发编程，理解 AQS、线程池的工作原理"
+        />
+      </section>
     </div>
   );
 }

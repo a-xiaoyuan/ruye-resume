@@ -71,6 +71,8 @@ export interface LayoutMetrics {
 
 export type FitStatus =
   | "fitted-default"
+  /** 内容不满一页，在上限内放宽了间距与行距，让页面自然填满 */
+  | "fitted-relaxed"
   | "fitted-tightened"
   | "overflow"
   | "continuous"

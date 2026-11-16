@@ -1,0 +1,10 @@
+# 用法：SPRING_PROFILES_ACTIVE=mysql RUYE_DB_URL=jdbc:mysql://host:3306/ruye RUYE_DB_USER=... RUYE_DB_PASSWORD=... java -jar ruye-server.jar
+# 表结构见 src/main/resources/db/schema-mysql.sql；首次部署可先执行它，或保留 ddl-auto: update 让 Hibernate 建表
+spring:
+  datasource:
+    url: ${RUYE_DB_URL:jdbc:mysql://localhost:3306/ruye?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC}
+    username: ${RUYE_DB_USER:ruye}
+    password: ${RUYE_DB_PASSWORD:}
+  jpa:
+    hibernate:
+      ddl-auto: update

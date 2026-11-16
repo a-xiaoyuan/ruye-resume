@@ -3,7 +3,8 @@ import { beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { normalizeDate, recoverDocument, validateDocument, type RuyeDocument } from "../packages/schema/src/index.ts";
-import { loadOutcome, openSession, saveCurrent, saveStatusText } from "../apps/web/src/storage.ts";
+import { deleteDocument, listDocuments, loadDocument, loadOutcome, newDocumentId, openSession, saveCurrent, saveStatusText } from "../apps/web/src/storage.ts";
+import { duplicateDocument, setAlias } from "../apps/web/src/doc-ops.ts";
 
 class MemoryStorage {
   m = new Map<string, string>();
@@ -217,4 +218,71 @@ test("JSON 备份里的非法日期可以再导入，姓名和学校还在", () 
   assert.ok(recovered!.issues.length > 0);
   assert.equal(recoverDocument("不是对象"), null);
   assert.equal(recoverDocument({ version: 1 }), null);
+});
+
+// ---------------------------------------------------------------- 多份简历
+
+test("多份简历：各存各的，列表按最近使用排序，备注名优先显示", () => {
+  const a = userDoc("2028-06");
+  const b = setAlias(duplicateDocument(a), "投字节-后端");
+  if (b.modules[0].type === "basic_info") b.modules[0].data.name = "张三（字节版）";
+  assert.equal(saveCurrent(a, "doc-a"), null);
+  assert.equal(saveCurrent(b, "doc-b"), null);
+  const list = listDocuments();
+  assert.deepEqual(list.map((d) => d.id), ["doc-b", "doc-a"]);
+  assert.equal(list[0].label, "投字节-后端");
+  assert.equal(list[1].label, "我的简历-不要丢");
+  assert.equal(nameOf(loadDocument("doc-a")!.doc), "张三");
+  assert.equal(nameOf(loadDocument("doc-b")!.doc), "张三（字节版）");
+  // 再保存 a：a 排到最前，b 不受影响
+  assert.equal(saveCurrent(a, "doc-a"), null);
+  assert.deepEqual(listDocuments().map((d) => d.id), ["doc-a", "doc-b"]);
+  assert.equal(nameOf(loadDocument("doc-b")!.doc), "张三（字节版）");
+  // 下次打开编辑器时恢复最后保存的那份
+  const opened = loadOutcome();
+  assert.ok(opened.kind === "draft" && opened.id === "doc-a");
+});
+
+test("复制简历：内容相同、互相独立，备注名加「副本」", () => {
+  const a = userDoc("2028-06");
+  const b = duplicateDocument(a);
+  assert.equal(b.meta.alias, "我的简历-不要丢 副本");
+  if (b.modules[0].type === "basic_info") b.modules[0].data.name = "改过";
+  assert.equal(nameOf(a), "张三");
+  assert.ok(validateDocument(b).ok);
+  assert.equal(setAlias(b, "  ").meta.alias, undefined);
+});
+
+test("删除一份：只删这一份；存档损坏时拒绝删除且不改动原始数据", () => {
+  saveCurrent(userDoc("2028-06"), "doc-a");
+  saveCurrent(setAlias(userDoc("2028-06"), "第二份"), "doc-b");
+  assert.equal(deleteDocument("doc-a"), null);
+  assert.deepEqual(listDocuments().map((d) => d.id), ["doc-b"]);
+  assert.equal(loadDocument("doc-a"), null);
+
+  memory.setItem("ruye:documents", "{坏掉的 JSON");
+  assert.match(deleteDocument("doc-b") ?? "", /未写入/);
+  assert.equal(memory.getItem("ruye:documents"), "{坏掉的 JSON");
+  assert.deepEqual(listDocuments(), []);
+});
+
+test("列表跳过读不出的条目，但保存其他简历时不会把它们删掉", () => {
+  memory.setItem("ruye:documents", JSON.stringify([{ id: "broken", doc: { 乱码: true } }]));
+  saveCurrent(userDoc("2028-06"), "doc-a");
+  assert.deepEqual(listDocuments().map((d) => d.id), ["doc-a"]);
+  const raw = JSON.parse(memory.getItem("ruye:documents")!);
+  assert.ok(raw.some((x: { id: string }) => x.id === "broken"), "读不出的条目必须原样保留");
+});
+
+test("新简历 id 不重复；备注名参与校验与草稿恢复", () => {
+  const ids = new Set(Array.from({ length: 200 }, newDocumentId));
+  assert.equal(ids.size, 200);
+  const doc = userDoc("2028-06");
+  (doc.meta as any).alias = 42;
+  assert.equal(validateDocument(doc).ok, false);
+  // 备注名坏了不连累正文：恢复时丢掉备注名，其余原样保留
+  const rec = recoverDocument(doc);
+  assert.ok(rec);
+  assert.equal(rec.doc.meta.alias, undefined);
+  assert.equal(nameOf(rec.doc), "张三");
 });

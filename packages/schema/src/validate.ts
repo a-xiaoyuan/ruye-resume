@@ -186,6 +186,7 @@ function checkModuleData(ctx: Ctx, type: ModuleType, data: Record<string, unknow
         },
         "categories",
       );
+      stringArray(ctx, data.notes, `${p}.notes`, true);
       return;
     case "research":
       items(ctx, data, p, (it, ip) => {
@@ -203,6 +204,9 @@ function checkModuleData(ctx: Ctx, type: ModuleType, data: Record<string, unknow
         urlField(ctx, it, "url", ip);
         reqDate(ctx, it, "date", ip, true);
       });
+      return;
+    case "summary":
+      if (typeof data.text !== "string") ctx.fail(`${p}.text`, "必须是字符串");
       return;
     case "award":
       items(ctx, data, p, (it, ip) => {
@@ -225,6 +229,7 @@ export function validateDocument(input: unknown): ValidationResult {
     reqString(ctx, input.meta, "title", "$.meta");
     if (input.meta.locale !== "zh-CN") ctx.fail("$.meta.locale", "只支持 zh-CN");
     reqString(ctx, input.meta, "updatedAt", "$.meta");
+    optString(ctx, input.meta, "alias", "$.meta");
   }
 
   if (!isObj(input.layout)) ctx.fail("$.layout", "缺少 layout 对象");
@@ -285,6 +290,13 @@ export function recoverDocument(input: unknown): { doc: RuyeDocument; issues: Va
   const result = validateDocument(input);
   if (result.ok) return { doc: result.doc, issues: [] };
   if (!isRecoverableDraft(input)) return null;
+  // 备注名只是列表里的显示名：类型不对时丢掉它，不连累整份简历
+  if (input.meta.alias !== undefined && typeof input.meta.alias !== "string") {
+    const { alias: _bad, ...meta } = input.meta;
+    const doc = { ...input, meta };
+    const again = validateDocument(doc);
+    return { doc, issues: again.ok ? [] : again.issues };
+  }
   return { doc: input, issues: result.issues };
 }
 
@@ -337,12 +349,15 @@ function isRecoverableModule(m: unknown): boolean {
     case "skills":
       return (
         Array.isArray(d.categories) &&
-        d.categories.every((c) => isObj(c) && isId(c.id) && isText(c.name) && isTextList(c.items))
+        d.categories.every((c) => isObj(c) && isId(c.id) && isText(c.name) && isTextList(c.items)) &&
+        isTextList(d.notes)
       );
     case "research":
       return isItemList(d.items, (it) => isText(it.name) && isText(it.org) && isText(it.start) && isText(it.end) && isTextList(it.bullets));
     case "paper":
       return isItemList(d.items, (it) => isText(it.title) && isText(it.venue) && isText(it.date) && isText(it.authors) && isText(it.url));
+    case "summary":
+      return typeof d.text === "string";
     case "award":
       return isItemList(d.items, (it) => isText(it.name) && isText(it.issuer) && isText(it.date) && isText(it.description));
     default:
@@ -369,7 +384,9 @@ export function isModuleEmpty(m: Module): boolean {
     case "job_intention":
       return ![m.data.role, m.data.city, m.data.availability, m.data.salary].some(nonEmpty);
     case "skills":
-      return !m.data.categories.some((c) => c.items.some(nonEmpty));
+      return !m.data.categories.some((c) => c.items.some(nonEmpty)) && !(m.data.notes ?? []).some(nonEmpty);
+    case "summary":
+      return !nonEmpty(m.data.text);
     default:
       return m.data.items.length === 0;
   }

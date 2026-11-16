@@ -6,6 +6,7 @@ import {
   addItem,
   addModule,
   itemTitle,
+  moduleSummary,
   missingTypes,
   moveItem,
   moveModule,
@@ -69,4 +70,12 @@ test("标题随姓名与意向同步", () => {
   const doc = load("short");
   doc.meta.title = "旧标题";
   assert.equal(syncTitle(doc).meta.title, "林知夏-Java 后端实习生");
+});
+
+test("技能模块摘要同时显示分类数与描述句数", () => {
+  const doc = load("long");
+  const s = doc.modules.find((m) => m.type === "skills")!;
+  assert.equal(moduleSummary(s), "4 类 · 3 句");
+  if (s.type === "skills") s.data = { categories: [], notes: [] };
+  assert.equal(moduleSummary(s), "未填写");
 });

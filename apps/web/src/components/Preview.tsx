@@ -1,12 +1,8 @@
 // 右栏：A4 预览。SVG 来自和导出 PDF 同一个排版器、同一份输入
-import { A4_HEIGHT_MM, describeFit, type FitResult } from "../../../../packages/engine/src/index.ts";
+import { A4_HEIGHT_MM, describeFit } from "../../../../packages/engine/src/index.ts";
 
-export interface PreviewData {
-  svg: string;
-  result: FitResult;
-  /** 画板总高度（mm）：溢出时比 297 高，用来画出页外部分 */
-  boardMm: number;
-}
+export type { PreviewData } from "../layout-service.ts";
+import type { PreviewData } from "../layout-service.ts";
 
 interface Props {
   data: PreviewData | null;

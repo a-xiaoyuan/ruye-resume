@@ -13,3 +13,7 @@ apps/web/public/wasm/
 
 # 测试与 smoke 产物
 out/
+
+# 后端：Maven 产物与本地 H2 数据库
+server/target/
+server/data/

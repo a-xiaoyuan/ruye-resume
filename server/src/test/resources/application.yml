@@ -1,0 +1,21 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:ruye-test;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+ruye:
+  jwt:
+    secret: test-secret-that-is-long-enough-for-hs256!!
+    ttl: 1h
+  cors:
+    allowed-origins: http://localhost:5173
+  limits:
+    max-document-bytes: 20000
+    max-documents-per-user: 3
+  login:
+    max-failures: 3
+    lock-duration: 15m

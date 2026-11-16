@@ -3,6 +3,7 @@
 
 import { MODULE_LABELS, renderableModules, type Module, type PageMode, type RuyeDocument } from "../../schema/src/index.ts";
 import { sanitizeSvgLinks } from "./sanitize.ts";
+import { relaxTokens } from "./tokens.ts";
 import { applyStep, FIT_STEPS, isDiscreteStep, STEP_LABELS, STEP_LEVELS } from "./tokens.ts";
 import {
   A4_HEIGHT_MM,
@@ -71,6 +72,11 @@ export function pdfPageHeightsMm(pdf: Uint8Array): number[] {
 }
 
 const ptToMm = (pt: number) => pt / PT_PER_MM;
+
+/** 留白不超过这么多（mm）时不放宽 */
+const RELAX_MIN_SLACK_MM = 6;
+/** 放宽到离页底这么近（mm）就停止 */
+const RELAX_TARGET_SLACK_MM = 3;
 const round1 = (x: number) => Math.round(x * 10) / 10;
 
 /** 只保留参与排版的模块（可见且非空），模板只需要处理这些 */
@@ -198,15 +204,50 @@ export class LayoutEngine {
     return { fits: n === 1, heightMm };
   }
 
+  /**
+   * 内容不满一页时，在上限内放宽间距与行距，让页面自然填满，不留下大半截空白。
+   * 留白本来就不多（≤ RELAX_MIN_SLACK_MM）时不动；字号和页边距从不改变。
+   * 二分查找能装进一页的最大放宽量，每一档都用真实排版复核。
+   */
+  private async relaxToFill(doc: RuyeDocument, template: TemplateDef, defaultHeightMm: number): Promise<FitResult> {
+    const def = template.defaultTokens;
+    const done = (status: "fitted-default" | "fitted-relaxed", tokens: TypographyTokens, h: number): FitResult => ({
+      status,
+      appliedSteps: [],
+      tokens,
+      pageHeight: A4_HEIGHT_MM,
+      metrics: this.baseMetrics(h, A4_HEIGHT_MM, 1, true),
+    });
+    if (A4_HEIGHT_MM - defaultHeightMm <= RELAX_MIN_SLACK_MM) return done("fitted-default", def, defaultHeightMm);
+
+    // 先试上限：上限也装得下就直接用（内容很少时）
+    const top = relaxTokens(def, 1);
+    const topProbe = await this.fitsA4(doc, template, top);
+    if (topProbe.fits) return done("fitted-relaxed", top, topProbe.heightMm);
+
+    let lo = 0;
+    let hi = 1;
+    let best = { tokens: def, heightMm: defaultHeightMm };
+    for (let i = 0; i < 6; i++) {
+      const mid = (lo + hi) / 2;
+      const tokens = relaxTokens(def, mid);
+      const probe = await this.fitsA4(doc, template, tokens);
+      if (probe.fits) {
+        lo = mid;
+        best = { tokens, heightMm: probe.heightMm };
+        if (A4_HEIGHT_MM - probe.heightMm <= RELAX_TARGET_SLACK_MM) break;
+      } else hi = mid;
+    }
+    return lo === 0 ? done("fitted-default", def, defaultHeightMm) : done("fitted-relaxed", best.tokens, best.heightMm);
+  }
+
   async fitA4(doc: RuyeDocument, template: TemplateDef): Promise<FitResult> {
     const def = template.defaultTokens;
     const floor = template.floorTokens;
 
     let tokens = def;
     let probe = await this.fitsA4(doc, template, tokens);
-    if (probe.fits) {
-      return { status: "fitted-default", appliedSteps: [], tokens, pageHeight: A4_HEIGHT_MM, metrics: this.baseMetrics(probe.heightMm, A4_HEIGHT_MM, 1, true) };
-    }
+    if (probe.fits) return this.relaxToFill(doc, template, probe.heightMm);
 
     const applied: FitStep[] = [];
     for (const step of FIT_STEPS) {
@@ -304,6 +345,8 @@ export function describeFit(result: FitResult): { level: "ok" | "warn" | "error"
   switch (result.status) {
     case "fitted-default":
       return { level: "ok", text: "已装进一页 A4，未做任何收紧。" };
+    case "fitted-relaxed":
+      return { level: "ok", text: "已装进一页 A4。内容不满一页，已适当放宽间距与行距。" };
     case "fitted-tightened":
       return { level: "warn", text: `已自动收紧：${result.appliedSteps.map((s) => STEP_LABELS[s]).join(" / ")}。` };
     case "overflow": {

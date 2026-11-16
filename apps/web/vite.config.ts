@@ -11,4 +11,6 @@ export default defineConfig({
   server: { fs: { allow: [repoRoot] } },
   // typst.ts 自带 wasm，交给它自己按 URL 加载，不让 Vite 预打包
   optimizeDeps: { exclude: ["@myriaddreamin/typst.ts"] },
+  // 排版在 Web Worker 里跑；typst.ts 内部有动态 import，Worker 需要 ES 模块格式
+  worker: { format: "es" },
 });

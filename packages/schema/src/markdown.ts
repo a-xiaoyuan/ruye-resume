@@ -100,7 +100,9 @@ export function toMarkdown(doc: RuyeDocument): string {
         }
         break;
       case "skills":
-        for (const c of m.data.categories) out.push(`- ${c.name}：${c.items.join("、")}`);
+        // 分类名加粗，和描述句区分开：导入时据此还原，描述句里带冒号也不会被误认成分类
+        for (const c of m.data.categories) out.push(`- **${c.name}**：${c.items.join("、")}`);
+        for (const n of m.data.notes ?? []) if (n.trim() !== "") out.push(`- ${n}`);
         break;
       case "research":
         for (const it of m.data.items) {
@@ -115,6 +117,9 @@ export function toMarkdown(doc: RuyeDocument): string {
           out.push(`### ${it.title}`);
           out.push(...kv("期刊/会议", it.venue), ...kv("作者", it.authors), ...kv("日期", displayDate(it.date)), ...kv("链接", it.url));
         }
+        break;
+      case "summary":
+        for (const line of m.data.text.split("\n")) if (line.trim() !== "") out.push(line.trim());
         break;
       case "award":
         for (const it of m.data.items) {
@@ -151,6 +156,10 @@ const HEADING_ALIASES: Record<string, ModuleType> = {
   获奖情况: "award",
   荣誉奖项: "award",
   获奖: "award",
+  自我评价: "summary",
+  个人评价: "summary",
+  个人总结: "summary",
+  个人优势: "summary",
 };
 
 export interface MarkdownImportResult {
@@ -179,12 +188,33 @@ function parseDateLine(line: string): [string, string] | null {
   return ok(a) && ok(b) ? [a, b] : null;
 }
 
+const BOLD_CATEGORY = /^\*\*(.+?)\*\*\s*[：:]\s*(.*)$/;
+
+/**
+ * 技能区每一行是「分类」还是「描述句」：
+ * - 新格式（如页导出的文件）分类名加粗：`- **语言**：Java、Python`。只要出现过加粗分类，其余行一律是描述句。
+ * - 旧格式没有加粗：`名称：a、b、c` 且内容里没有句读（，。；）时算分类，否则算描述句。
+ */
+function resolveSkills(lines: { module: Extract<Module, { type: "skills" }>; text: string }[], nextId: () => string): void {
+  const strict = lines.some((l) => BOLD_CATEGORY.test(l.text));
+  for (const { module, text } of lines) {
+    const bold = text.match(BOLD_CATEGORY);
+    const kv = bold ? [text, bold[1], bold[2]] : strict ? null : text.match(KV_LINE);
+    const isCategory = kv !== null && (bold !== null || !/[，。；;]/.test(kv[2]));
+    if (isCategory && kv) {
+      module.data.categories.push({ id: nextId(), name: kv[1].trim(), items: kv[2].split(LIST_SPLIT).map((s) => s.trim()).filter(Boolean) });
+    } else {
+      (module.data.notes ??= []).push(text);
+    }
+  }
+}
+
 export function fromMarkdown(src: string): MarkdownImportResult {
   const warnings: string[] = [];
   const lines = src.replace(/\r\n?/g, "\n").split("\n");
   let i = 0;
   let title = "";
-  let templateId: TemplateId = "campus-serif";
+  let templateId: TemplateId = "classic";
   let pageMode: PageMode = "fit-a4";
   let theme: ThemeId | undefined;
 
@@ -209,6 +239,7 @@ export function fromMarkdown(src: string): MarkdownImportResult {
   };
 
   let current: Module | null = null;
+  const skillLines: { module: Extract<Module, { type: "skills" }>; text: string }[] = [];
   // 位于未识别的 ## 模块之下：其内容整体跳过（已在标题处给出一条警告）
   let skipping = false;
   // 当前条目（指向 data.items 中的最后一项）
@@ -237,6 +268,9 @@ export function fromMarkdown(src: string): MarkdownImportResult {
       case "skills":
         m = { ...base, type, data: { categories: [] } };
         break;
+      case "summary":
+        m = { ...base, type, data: { text: "" } };
+        break;
       default:
         m = { ...base, type, data: { items: [] } } as Module;
     }
@@ -245,7 +279,7 @@ export function fromMarkdown(src: string): MarkdownImportResult {
   };
 
   const startItem = (heading: string) => {
-    if (!current || current.type === "basic_info" || current.type === "job_intention" || current.type === "skills") {
+    if (!current || current.type === "basic_info" || current.type === "job_intention" || current.type === "skills" || current.type === "summary") {
       warnings.push(`「${heading}」不属于任何经历类模块，已忽略`);
       item = null;
       return;
@@ -304,11 +338,13 @@ export function fromMarkdown(src: string): MarkdownImportResult {
       else warnings.push(`求职意向中无法识别：「${text}」`);
       return;
     }
+    if (current.type === "summary") {
+      current.data.text = current.data.text ? `${current.data.text}\n${text}` : text;
+      return;
+    }
     if (current.type === "skills") {
-      const kvm = text.match(KV_LINE);
-      const name = kvm ? kvm[1].trim() : "技能";
-      const rest = kvm ? kvm[2] : text;
-      current.data.categories.push({ id: nextId("skill"), name, items: rest.split(LIST_SPLIT).map((s) => s.trim()).filter(Boolean) });
+      // 先收集，整个文件读完再判断是分类还是描述句（见 resolveSkills）
+      skillLines.push({ module: current, text });
       return;
     }
     if (!item) {
@@ -323,7 +359,7 @@ export function fromMarkdown(src: string): MarkdownImportResult {
         item![k] = v;
       };
       const t = current.type;
-      if (label === "简介" && (t === "work" || t === "internship" || t === "project")) return set("summary", value);
+      if ((label === "简介" || label === "项目简介" || label === "项目介绍") && (t === "work" || t === "internship" || t === "project")) return set("summary", value);
       if (label === "技术栈" && (t === "work" || t === "internship" || t === "project")) return set("techStack", value.split(LIST_SPLIT).filter(Boolean));
       if (label === "链接" && (t === "project" || t === "paper")) return set("url", value);
       if (label === "期刊/会议" && t === "paper") return set("venue", value);
@@ -389,6 +425,8 @@ export function fromMarkdown(src: string): MarkdownImportResult {
       } else addBullet(line);
     }
   }
+
+  resolveSkills(skillLines, () => nextId("skill"));
 
   const info = basic();
   const intent = modules.find((x) => x.type === "job_intention");

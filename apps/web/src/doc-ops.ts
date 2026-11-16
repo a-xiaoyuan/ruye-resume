@@ -125,8 +125,13 @@ export function moduleSummary(m: Module): string {
       return m.data.name || "未填写姓名";
     case "job_intention":
       return m.data.role || "未填写岗位";
-    case "skills":
-      return `${m.data.categories.length} 类`;
+    case "skills": {
+      const notes = (m.data.notes ?? []).filter((n) => n.trim() !== "").length;
+      const parts = [m.data.categories.length ? `${m.data.categories.length} 类` : "", notes ? `${notes} 句` : ""].filter(Boolean);
+      return parts.join(" · ") || "未填写";
+    }
+    case "summary":
+      return m.data.text.trim() ? `${m.data.text.trim().length} 字` : "未填写";
     default:
       return `${m.data.items.length} 条`;
   }
@@ -140,4 +145,20 @@ export function syncTitle(doc: RuyeDocument): RuyeDocument {
   const role = intent && intent.type === "job_intention" ? intent.data.role ?? "" : "";
   const title = [name, role].filter(Boolean).join("-") || "未命名简历";
   return title === doc.meta.title ? doc : { ...doc, meta: { ...doc.meta, title } };
+}
+
+/** 复制一份简历（例如为另一个岗位改一版）：内容相同，备注名加「副本」 */
+export function duplicateDocument(doc: RuyeDocument): RuyeDocument {
+  const copy = structuredClone(doc);
+  const base = doc.meta.alias?.trim() || doc.meta.title;
+  copy.meta = { ...copy.meta, alias: `${base} 副本`, updatedAt: new Date().toISOString() };
+  return copy;
+}
+
+/** 设置备注名；空白视为清除 */
+export function setAlias(doc: RuyeDocument, alias: string): RuyeDocument {
+  const meta = { ...doc.meta };
+  if (alias.trim() === "") delete meta.alias;
+  else meta.alias = alias;
+  return { ...doc, meta };
 }

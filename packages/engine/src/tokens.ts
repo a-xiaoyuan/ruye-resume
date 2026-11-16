@@ -83,3 +83,23 @@ export function checkTokenFloors(def: TypographyTokens, floor: TypographyTokens)
   if (floor.metaPt < f.bodyPt) issues.push(`次级文字低于 ${f.bodyPt}pt`);
   return issues;
 }
+
+// ---------------------------------------------------------------- 放宽（内容不满一页时）
+
+/** 放宽的上限：间距最多放大到默认的 1.6 倍，行距最多 +0.12（且不超过 1.75）。字号、页边距不动 */
+export const RELAX_LIMIT = { gapScale: 1.6, lineHeightDelta: 0.12, lineHeightMax: 1.75 } as const;
+
+/** 在默认值与放宽上限之间插值：t = 0 为默认，t = 1 为上限 */
+export function relaxTokens(def: TypographyTokens, t: number): TypographyTokens {
+  const k = 1 + (RELAX_LIMIT.gapScale - 1) * t;
+  const r3 = (x: number) => Math.round(x * 1000) / 1000;
+  return {
+    ...def,
+    pageMarginMm: { ...def.pageMarginMm },
+    fontFamily: { ...def.fontFamily },
+    sectionGapMm: r3(def.sectionGapMm * k),
+    itemGapMm: r3(def.itemGapMm * k),
+    paragraphGapMm: r3(def.paragraphGapMm * k),
+    lineHeight: r3(Math.min(RELAX_LIMIT.lineHeightMax, def.lineHeight + RELAX_LIMIT.lineHeightDelta * t)),
+  };
+}

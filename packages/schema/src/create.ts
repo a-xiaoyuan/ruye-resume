@@ -14,6 +14,8 @@ export function createModule(type: ModuleType): Module {
       return { ...base, type, data: {} };
     case "skills":
       return { ...base, type, data: { categories: [] } };
+    case "summary":
+      return { ...base, type, data: { text: "" } };
     default:
       return { ...base, type, data: { items: [] } } as Module;
   }
@@ -23,7 +25,7 @@ export function createEmptyDocument(): RuyeDocument {
   return {
     version: 1,
     meta: { title: "未命名简历", locale: "zh-CN", updatedAt: new Date().toISOString() },
-    layout: { templateId: "campus-serif", pageMode: "fit-a4" },
+    layout: { templateId: "classic", pageMode: "fit-a4" },
     modules: (["basic_info", "job_intention", "education", "skills", "internship", "project", "award"] as ModuleType[]).map(createModule),
   };
 }

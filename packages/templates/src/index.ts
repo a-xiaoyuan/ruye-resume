@@ -15,6 +15,30 @@ function tokens(margin: TypographyTokens["pageMarginMm"], def: Omit<TypographyTo
   };
 }
 
+export const CLASSIC_TOKENS = tokens(
+  { top: 14, right: 16, bottom: 14, left: 16 },
+  { namePt: 22, headingPt: 12.5, bodyPt: 11, metaPt: 10.5, lineHeight: 1.48, sectionGapMm: 3.6, itemGapMm: 2.4, paragraphGapMm: 0.4 },
+  { namePt: 18, headingPt: 11.5, bodyPt: 10.5, metaPt: 10.5, lineHeight: 1.35, sectionGapMm: 2.2, itemGapMm: 1, paragraphGapMm: 0.15 },
+);
+
+export const MINIMAL_TOKENS = tokens(
+  { top: 15, right: 17, bottom: 15, left: 17 },
+  { namePt: 22, headingPt: 12, bodyPt: 11, metaPt: 10.5, lineHeight: 1.5, sectionGapMm: 4, itemGapMm: 2.6, paragraphGapMm: 0.5 },
+  { namePt: 18, headingPt: 11.5, bodyPt: 10.5, metaPt: 10.5, lineHeight: 1.35, sectionGapMm: 2.2, itemGapMm: 1, paragraphGapMm: 0.15 },
+);
+
+export const TIMELINE_TOKENS = tokens(
+  { top: 13, right: 14, bottom: 13, left: 13 },
+  { namePt: 22, headingPt: 12, bodyPt: 10.75, metaPt: 10.5, lineHeight: 1.48, sectionGapMm: 3.8, itemGapMm: 2.6, paragraphGapMm: 0.45 },
+  { namePt: 18, headingPt: 11.5, bodyPt: 10.5, metaPt: 10.5, lineHeight: 1.35, sectionGapMm: 2, itemGapMm: 1, paragraphGapMm: 0.12 },
+);
+
+export const ELEGANT_TOKENS = tokens(
+  { top: 14, right: 16, bottom: 14, left: 16 },
+  { namePt: 23, headingPt: 12.5, bodyPt: 11, metaPt: 10.5, lineHeight: 1.5, sectionGapMm: 4, itemGapMm: 2.6, paragraphGapMm: 0.5 },
+  { namePt: 18, headingPt: 11.5, bodyPt: 10.5, metaPt: 10.5, lineHeight: 1.35, sectionGapMm: 2.2, itemGapMm: 1, paragraphGapMm: 0.15 },
+);
+
 export const CAMPUS_SERIF_TOKENS = tokens(
   { top: 14, right: 15, bottom: 14, left: 15 },
   { namePt: 22, headingPt: 13.5, bodyPt: 11.25, metaPt: 10.75, lineHeight: 1.55, sectionGapMm: 5, itemGapMm: 3, paragraphGapMm: 0.8 },
@@ -95,29 +119,69 @@ export interface TemplateMeta {
   tokens: Tokens;
   /** 推荐的模块顺序（编辑器里「按模板推荐顺序排列」用） */
   recommendedOrder: ModuleType[];
+  /** 固定色板：设置后忽略文档的主题色（编辑器里主题色选择会置灰） */
+  fixedTheme?: "mono";
+  /** 模板选择器里的分组 */
+  group: "classic" | "colorful";
 }
 
 export const TEMPLATE_META: TemplateMeta[] = [
   {
+    id: "classic",
+    name: "经典 · 简洁",
+    description: "姓名居中、单一主色、细线标题，没有大面积色块。打印清爽、系统解析稳妥，适合绝大多数投递。",
+    tokens: CLASSIC_TOKENS,
+    recommendedOrder: ["basic_info", "job_intention", "education", "skills", "internship", "work", "project", "research", "paper", "award", "summary"],
+    group: "classic",
+  },
+  {
+    id: "minimal",
+    name: "极简 · 黑白",
+    description: "只用黑与深灰，没有图标和色块，标题下一条黑色细线。黑白打印与系统解析效果最稳，主题色不生效。",
+    tokens: MINIMAL_TOKENS,
+    recommendedOrder: ["basic_info", "job_intention", "education", "skills", "work", "internship", "project", "research", "paper", "award", "summary"],
+    fixedTheme: "mono",
+    group: "classic",
+  },
+  {
+    id: "elegant",
+    name: "雅致 · 衬线",
+    description: "页眉上下双细线、宋体姓名居中，模块标题居中、两侧渐隐短线。稳重，适合国企、银行、研究岗。",
+    tokens: ELEGANT_TOKENS,
+    recommendedOrder: ["basic_info", "job_intention", "education", "research", "paper", "skills", "internship", "work", "project", "award", "summary"],
+    group: "classic",
+  },
+  {
+    id: "timeline",
+    name: "时间轴",
+    description: "经历按时间轴排：左侧时间列、竖线与圆点，右侧内容；标题是浅色标签条。经历多、时间线清晰时最好看。",
+    tokens: TIMELINE_TOKENS,
+    recommendedOrder: ["basic_info", "job_intention", "work", "internship", "project", "education", "skills", "research", "paper", "award", "summary"],
+    group: "colorful",
+  },
+  {
     id: "campus-serif",
-    name: "校招单栏",
-    description: "衬线标题、教育前置、留白充足。适合应届生与实习。",
+    name: "校招 · 横幅",
+    description: "页顶渐变横幅、圆形图标标题、胶囊日期，教育前置。适合应届生与实习。",
     tokens: CAMPUS_SERIF_TOKENS,
-    recommendedOrder: ["basic_info", "job_intention", "education", "skills", "internship", "work", "project", "research", "paper", "award"],
+    recommendedOrder: ["basic_info", "job_intention", "education", "skills", "internship", "work", "project", "research", "paper", "award", "summary"],
+    group: "colorful",
   },
   {
     id: "social-sans",
-    name: "社招单栏",
-    description: "全无衬线、信息更密，技能与履历优先。适合 1～8 年经验。",
+    name: "社招 · 侧条",
+    description: "左缘渐变色条、大号姓名、联系方式竖排，信息更密，技能与履历优先。适合 1～8 年经验。",
     tokens: SOCIAL_SANS_TOKENS,
-    recommendedOrder: ["basic_info", "job_intention", "skills", "work", "internship", "project", "education", "research", "paper", "award"],
+    recommendedOrder: ["basic_info", "job_intention", "skills", "work", "internship", "project", "education", "research", "paper", "award", "summary"],
+    group: "colorful",
   },
   {
     id: "split-compact",
-    name: "双栏紧凑",
-    description: "左侧栏放联系方式、技能、教育、获奖，右侧放经历。内容多时提高一页容量。",
+    name: "双栏 · 深色侧栏",
+    description: "左侧深色渐变侧栏放联系方式、技能、教育、获奖，右侧放经历，两栏自动平衡。内容多时提高一页容量。",
     tokens: SPLIT_COMPACT_TOKENS,
-    recommendedOrder: ["basic_info", "job_intention", "skills", "education", "award", "work", "internship", "project", "research", "paper"],
+    recommendedOrder: ["basic_info", "job_intention", "skills", "education", "award", "work", "internship", "project", "research", "paper", "summary"],
+    group: "colorful",
   },
 ];
 
@@ -148,7 +212,7 @@ export function createTemplates(sources: TemplateSources): Map<TemplateId, Templ
       name: meta.name,
       defaultTokens: meta.tokens.default,
       floorTokens: meta.tokens.floor,
-      build: (doc, tokens, pageHeight) => buildTypstInput(source, sources.common, doc, tokens, pageHeight),
+      build: (doc, tokens, pageHeight) => buildTypstInput(source, sources.common, meta.fixedTheme ? { ...doc, layout: { ...doc.layout, theme: meta.fixedTheme as never } } : doc, tokens, pageHeight),
     });
   }
   return out;

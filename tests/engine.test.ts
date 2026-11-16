@@ -1,3 +1,4 @@
+import { TEMPLATE_IDS } from "../packages/schema/src/index.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -10,6 +11,8 @@ import {
   LayoutEngine,
   parseSvgSize,
   READABILITY_FLOOR,
+  RELAX_LIMIT,
+  relaxTokens,
   sanitizeSvgLinks,
   parseSvgPages,
   countPdfPages,
@@ -43,8 +46,8 @@ function assertAboveFloor(t: TypographyTokens) {
   for (const v of Object.values(t.pageMarginMm)) assert.ok(v >= f.pageMarginMm, "页边距低于 12mm");
 }
 
-test("三套模板的 token 都满足可读性底线", () => {
-  assert.equal(TEMPLATE_META.length, 3);
+test("所有模板的 token 都满足可读性底线，且与 schema 的模板列表一致", () => {
+  assert.deepEqual(TEMPLATE_META.map((m) => m.id).sort(), [...TEMPLATE_IDS].sort());
   for (const m of TEMPLATE_META) assert.deepEqual(checkTokenFloors(m.tokens.default, m.tokens.floor), [], m.id);
 });
 
@@ -84,14 +87,37 @@ test("照片作为二进制文件注入，data.json 不带 base64", () => {
   assert.equal(page.photo, "photo.png");
 });
 
-test("短样本 + fit-a4：默认 token 即装下", async () => {
+/** 放宽只动间距与行距：字号、页边距、紧凑开关不变；不超过上限 */
+function assertRelaxedWithinLimits(t: TypographyTokens, def: TypographyTokens) {
+  for (const k of ["namePt", "headingPt", "bodyPt", "metaPt", "compact"] as const) assert.equal(t[k], def[k], k);
+  assert.deepEqual(t.pageMarginMm, def.pageMarginMm);
+  for (const k of ["sectionGapMm", "itemGapMm", "paragraphGapMm"] as const) {
+    assert.ok(t[k] >= def[k] && t[k] <= def[k] * RELAX_LIMIT.gapScale + 1e-9, `${k} ${t[k]}`);
+  }
+  assert.ok(t.lineHeight >= def.lineHeight && t.lineHeight <= Math.min(RELAX_LIMIT.lineHeightMax, def.lineHeight + RELAX_LIMIT.lineHeightDelta) + 1e-9);
+}
+
+test("短样本 + fit-a4：装下一页；内容不满时在上限内放宽，不改字号与页边距", async () => {
   const engine = new LayoutEngine(new FakeBackend());
   const r = await engine.fitA4(load("short"), template);
-  assert.equal(r.status, "fitted-default");
+  assert.ok(r.status === "fitted-default" || r.status === "fitted-relaxed", r.status);
   assert.equal(r.metrics.pageCount, 1);
   assert.equal(r.metrics.overflowMm, 0);
-  assert.deepEqual(r.tokens, template.defaultTokens);
+  assert.ok(r.metrics.contentHeightMm <= A4_HEIGHT_MM);
+  assert.deepEqual(r.appliedSteps, []);
+  assertRelaxedWithinLimits(r.tokens, template.defaultTokens);
   assert.equal(r.pageHeight, A4_HEIGHT_MM);
+  if (r.status === "fitted-relaxed") assert.match(describeFit(r).text, /放宽/);
+});
+
+test("放宽规则：t=0 即默认值，t=1 即上限；标准分页与长一页从不放宽", async () => {
+  const def = template.defaultTokens;
+  assert.deepEqual(relaxTokens(def, 0), def);
+  assertRelaxedWithinLimits(relaxTokens(def, 1), def);
+  assert.ok(relaxTokens(def, 1).sectionGapMm > def.sectionGapMm);
+  const engine = new LayoutEngine(new FakeBackend());
+  assert.deepEqual((await engine.standard(load("short"), template)).tokens, def);
+  assert.deepEqual((await engine.continuous(load("short"), template)).tokens, def);
 });
 
 test("短样本 + standard：1 页", async () => {

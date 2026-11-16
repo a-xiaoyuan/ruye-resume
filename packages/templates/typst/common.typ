@@ -11,19 +11,32 @@
 #let t = json("tokens.json")
 #let spec = json("page.json")
 
-// ---------------------------------------------------------------- 主题色
-// 与 packages/schema/src/types.ts 的 THEMES 保持一致
-#let themes = (
-  ink: rgb("#1f3d63"),
-  teal: rgb("#14595a"),
-  wine: rgb("#7a2a35"),
-  graphite: rgb("#2e3440"),
+// ---------------------------------------------------------------- 主题色板
+// 每个主题一整套颜色：primary 深主色（标题、强调文字）、secondary 鲜明辅色（图形、色块）、
+// bright 亮色（渐变的另一端）、tint 极浅底色（胶囊、卡片）。
+// 文字只用 primary（对白底对比度足够打印）；secondary / bright 只用于图形和大面积色块。
+// 主题 id 与 packages/schema/src/types.ts 的 THEMES 保持一致
+#let palettes = (
+  ink: (primary: rgb("#1d3b8b"), secondary: rgb("#2f6fe4"), bright: rgb("#38bdf8"), tint: rgb("#eef4ff")),
+  teal: (primary: rgb("#0e5f5c"), secondary: rgb("#12a594"), bright: rgb("#5eead4"), tint: rgb("#eafbf6")),
+  wine: (primary: rgb("#8c1d40"), secondary: rgb("#d1365f"), bright: rgb("#fb7185"), tint: rgb("#fff0f3")),
+  graphite: (primary: rgb("#1f2937"), secondary: rgb("#475569"), bright: rgb("#94a3b8"), tint: rgb("#f1f5f9")),
+  violet: (primary: rgb("#4c1d95"), secondary: rgb("#7c3aed"), bright: rgb("#c084fc"), tint: rgb("#f5f0ff")),
+  amber: (primary: rgb("#8a3b0b"), secondary: rgb("#d97706"), bright: rgb("#fbbf24"), tint: rgb("#fff7e6")),
+  // 只给「极简 · 黑白」用，不出现在主题色选择里
+  mono: (primary: rgb("#111111"), secondary: rgb("#3a3a3a"), bright: rgb("#8a8a8a"), tint: rgb("#f1f1f1")),
 )
-#let accent = themes.at(data.at("theme", default: "ink"), default: themes.ink)
-#let ink = rgb("#18202c")                       // 正文：近黑
+#let pal = palettes.at(data.at("theme", default: "ink"), default: palettes.ink)
+#let accent = pal.primary
+#let accent2 = pal.secondary
+#let bright = pal.bright
+#let tint = pal.tint
+#let ink = rgb("#161b26")                       // 正文：近黑
 #let muted = rgb("#4b5563")                     // 次级信息：深灰（打印仍清晰）
-#let hairline = rgb("#c9d2de")                  // 细线
-#let tint = accent.lighten(90%).desaturate(30%) // 标签、侧栏底色
+#let hairline = rgb("#d5dbe4")                  // 细线
+// 渐变：主色 → 辅色 → 亮色
+#let grad-h = gradient.linear(pal.primary, pal.secondary, pal.bright, angle: 0deg)
+#let grad-v = gradient.linear(pal.primary, pal.secondary, angle: 90deg)
 
 // ---------------------------------------------------------------- 尺寸
 #let body-size = t.bodyPt * 1pt
@@ -85,19 +98,42 @@
 // ---------------------------------------------------------------- 图标（原创，简单线性图形）
 
 #let icon-svg = (
-  phone: "<rect x='6.5' y='2.5' width='11' height='19' rx='2.5' fill='none' stroke='C' stroke-width='2'/><circle cx='12' cy='17.6' r='1.3' fill='C'/>",
-  email: "<rect x='3' y='5' width='18' height='14' rx='2.2' fill='none' stroke='C' stroke-width='2'/><path d='M4 7l8 6 8-6' fill='none' stroke='C' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/>",
-  location: "<path d='M12 21.5s6.5-5.8 6.5-11.2a6.5 6.5 0 1 0-13 0c0 5.4 6.5 11.2 6.5 11.2z' fill='none' stroke='C' stroke-width='2' stroke-linejoin='round'/><circle cx='12' cy='10.3' r='2.4' fill='C'/>",
-  code: "<path d='M8.5 7 3.5 12l5 5M15.5 7l5 5-5 5' fill='none' stroke='C' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/>",
-  link: "<path d='M10.2 13.8a4 4 0 0 0 5.7 0l3-3a4 4 0 1 0-5.7-5.7l-1.1 1.1M13.8 10.2a4 4 0 0 0-5.7 0l-3 3a4 4 0 1 0 5.7 5.7l1.1-1.1' fill='none' stroke='C' stroke-width='2' stroke-linecap='round'/>",
-  person: "<circle cx='12' cy='8' r='3.8' fill='none' stroke='C' stroke-width='2'/><path d='M4.5 20.5c1.4-3.8 4.2-5.6 7.5-5.6s6.1 1.8 7.5 5.6' fill='none' stroke='C' stroke-width='2' stroke-linecap='round'/>",
-  target: "<circle cx='12' cy='12' r='8.5' fill='none' stroke='C' stroke-width='2'/><circle cx='12' cy='12' r='4' fill='none' stroke='C' stroke-width='2'/><circle cx='12' cy='12' r='1.2' fill='C'/>",
+  phone: "<rect x='6.5' y='2.5' width='11' height='19' rx='2.5' fill='none' stroke='{c}' stroke-width='2'/><circle cx='12' cy='17.6' r='1.3' fill='{c}'/>",
+  email: "<rect x='3' y='5' width='18' height='14' rx='2.2' fill='none' stroke='{c}' stroke-width='2'/><path d='M4 7l8 6 8-6' fill='none' stroke='{c}' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/>",
+  location: "<path d='M12 21.5s6.5-5.8 6.5-11.2a6.5 6.5 0 1 0-13 0c0 5.4 6.5 11.2 6.5 11.2z' fill='none' stroke='{c}' stroke-width='2' stroke-linejoin='round'/><circle cx='12' cy='10.3' r='2.4' fill='{c}'/>",
+  code: "<path d='M8.5 7 3.5 12l5 5M15.5 7l5 5-5 5' fill='none' stroke='{c}' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/>",
+  link: "<path d='M10.2 13.8a4 4 0 0 0 5.7 0l3-3a4 4 0 1 0-5.7-5.7l-1.1 1.1M13.8 10.2a4 4 0 0 0-5.7 0l-3 3a4 4 0 1 0 5.7 5.7l1.1-1.1' fill='none' stroke='{c}' stroke-width='2' stroke-linecap='round'/>",
+  person: "<circle cx='12' cy='8' r='3.8' fill='none' stroke='{c}' stroke-width='2'/><path d='M4.5 20.5c1.4-3.8 4.2-5.6 7.5-5.6s6.1 1.8 7.5 5.6' fill='none' stroke='{c}' stroke-width='2' stroke-linecap='round'/>",
+  target: "<circle cx='12' cy='12' r='8.5' fill='none' stroke='{c}' stroke-width='2'/><circle cx='12' cy='12' r='4' fill='none' stroke='{c}' stroke-width='2'/><circle cx='12' cy='12' r='1.2' fill='{c}'/>",
+)
+
+// 模块图标（原创线性图形，24×24）
+#let section-icon-svg = (
+  education: "<path d='M12 4 2 9l10 5 10-5-10-5z' fill='none' stroke='{c}' stroke-width='2' stroke-linejoin='round'/><path d='M6 11.4v4.6c0 1.6 2.7 3 6 3s6-1.4 6-3v-4.6M22 9v5' fill='none' stroke='{c}' stroke-width='2' stroke-linecap='round'/>",
+  skills: "<path d='M13.5 2.5 5 13.5h6l-1 8 8.5-11h-6l1-8z' fill='none' stroke='{c}' stroke-width='2' stroke-linejoin='round'/>",
+  work: "<rect x='3' y='7' width='18' height='13' rx='2.2' fill='none' stroke='{c}' stroke-width='2'/><path d='M9 7V5.2h6V7M3 12.5h18' fill='none' stroke='{c}' stroke-width='2'/>",
+  internship: "<rect x='3' y='7' width='18' height='13' rx='2.2' fill='none' stroke='{c}' stroke-width='2'/><path d='M9 7V5.2h6V7M3 12.5h18' fill='none' stroke='{c}' stroke-width='2'/>",
+  project: "<path d='M12 3 2.5 8 12 13l9.5-5L12 3z' fill='none' stroke='{c}' stroke-width='2' stroke-linejoin='round'/><path d='m2.5 12.5 9.5 5 9.5-5M2.5 17 12 22l9.5-5' fill='none' stroke='{c}' stroke-width='2' stroke-linejoin='round'/>",
+  research: "<path d='M9 3h6M10 3v6.2l-5.2 9.1A1.8 1.8 0 0 0 6.4 21h11.2a1.8 1.8 0 0 0 1.6-2.7L14 9.2V3M7.5 15h9' fill='none' stroke='{c}' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/>",
+  paper: "<path d='M7 3h7l5 5v13H7z' fill='none' stroke='{c}' stroke-width='2' stroke-linejoin='round'/><path d='M14 3v5h5M10 13h6M10 17h6' fill='none' stroke='{c}' stroke-width='2' stroke-linecap='round'/>",
+  award: "<circle cx='12' cy='9' r='5.5' fill='none' stroke='{c}' stroke-width='2'/><path d='m8.6 13.3-1.4 7.7L12 18.6l4.8 2.4-1.4-7.7' fill='none' stroke='{c}' stroke-width='2' stroke-linejoin='round'/>",
+  summary: "<path d='M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z' fill='none' stroke='{c}' stroke-width='2' stroke-linejoin='round'/>",
+)
+#let svg-image(body, color, size) = image(
+  bytes("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'>" + body.replace("{c}", color.to-hex()) + "</svg>"),
+  format: "svg",
+  height: size,
+)
+// 圆形色块里的白色模块图标
+#let section-badge(type, size: 1.55em, fill: accent) = box(
+  baseline: 0.3em,
+  circle(radius: size / 2, fill: fill, inset: 0pt, align(center + horizon, svg-image(section-icon-svg.at(type, default: section-icon-svg.project), white, size * 0.58))),
 )
 
 #let icon(name, color: accent, size: 0.95em) = box(
   baseline: 0.14em,
   image(
-    bytes("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'>" + icon-svg.at(name).replace("C", color.to-hex()) + "</svg>"),
+    bytes("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'>" + icon-svg.at(name).replace("{c}", color.to-hex()) + "</svg>"),
     format: "svg",
     height: size,
   ),
@@ -123,28 +159,34 @@
 }
 
 // 一行联系方式：图标 + 文字，项与项之间留白；每项内部不断行，便于复制
-#let contact-row(d, color: muted) = {
+#let contact-row(d, color: muted, icon-color: accent) = {
   let items = contact-items(d)
   if items.len() == 0 { return none }
-  text(size: meta-size, fill: color, items.map(((ic, c)) => box[#icon(ic) #h(0.15em) #c]).join(h(1.1em)))
+  text(size: meta-size, fill: color, items.map(((ic, c)) => box[#icon(ic, color: icon-color) #h(0.15em) #c]).join(h(1.1em)))
+}
+
+// 纯文字联系方式（不带图标），用分隔符连接
+#let contact-text(d, sep: [ · ]) = {
+  let items = contact-items(d)
+  if items.len() == 0 { return none }
+  items.map(((ic, c)) => box(c)).join(sep)
 }
 
 #let intention-module = doc-modules.find(m => m.type == "job_intention")
 #let has-basic = doc-modules.any(m => m.type == "basic_info")
 
 // 求职意向：岗位加粗 + 其余信息用竖线分隔
-#let intention-row(d, label: true) = {
+#let intention-row(d, role-color: accent, color: ink, sep-color: hairline.darken(30%)) = {
   let role = get(d, "role")
   let rest = (get(d, "city"), get(d, "availability"), get(d, "salary")).filter(x => x != none)
   if role == none and rest.len() == 0 { return none }
-  {
-    if label { icon("target"); h(0.35em) }
-    if role != none { text(weight: "bold", fill: accent)[#role] }
+  text(fill: color, {
+    if role != none { text(weight: "bold", fill: role-color)[#role] }
     for (i, r) in rest.enumerate() {
-      if i > 0 or role != none { h(0.55em); text(fill: hairline.darken(30%))[|]; h(0.55em) }
+      if i > 0 or role != none { h(0.55em); text(fill: sep-color)[|]; h(0.55em) }
       [#r]
     }
-  }
+  })
 }
 
 #let photo-path = spec.at("photo", default: none)
@@ -170,10 +212,25 @@
 }
 
 // 标题行：左侧标题，右侧日期（右对齐、等宽数字）
-#let headline(lhs, rhs) = {
+// 日期的样式由模板选择：pill（浅底胶囊）、accent（主色文字）、plain（灰色文字）
+#let date-style = state("ruye-date-style", "plain")
+#let date-display(s) = context {
+  let style = date-style.get()
+  let body = text(size: meta-size, number-width: "tabular")[#s]
+  if style == "pill" {
+    box(fill: tint, radius: 99pt, inset: (x: 0.6em), outset: (y: 0.24em), text(fill: accent, weight: "medium", body))
+  } else if style == "accent" {
+    text(fill: accent, weight: "medium", body)
+  } else {
+    text(fill: muted, body)
+  }
+}
+
+// 日期样式为 "none" 时标题行不放日期（时间轴模板把日期放在左侧时间列）
+#let headline(lhs, rhs) = context {
   // 标题行折行时不做两端对齐，避免把字拉散
   set par(justify: false)
-  if rhs == none or rhs == "" {
+  if rhs == none or rhs == "" or date-style.get() == "none" {
     block(lhs)
   } else {
     grid(
@@ -181,47 +238,74 @@
       column-gutter: 1em,
       align: (left + bottom, right + bottom),
       lhs,
-      text(size: meta-size, fill: muted, number-width: "tabular")[#rhs],
+      date-display(rhs),
     )
   }
 }
 
-// 要点：强调色小圆点 + 文本（悬挂缩进）
-#let bullet(s) = grid(
+// 要点：强调色小圆点 + 内容（悬挂缩进）
+#let bullet-of(body) = grid(
   columns: (1em, 1fr),
   align: (left + top, left + top),
   box(height: 1em, align(horizon, move(dy: 0.08em, dot(0.32em, accent)))),
-  emphasize(s),
+  body,
 )
-#let bullets(arr) = nonempty(arr).map(b => bullet(b))
+// 要点的三种写法（都只是普通字符串，不改数据结构）：
+//  · 「个人职责：」这种以冒号结尾的短行 → 分块小标题（不带圆点，主色加粗）
+//  · 「缓存优化：用 Redis……」句首短语 + 冒号 → 冒号前加粗，成为这一条的短标题
+//  · 其他 → 普通要点，数字指标自动加粗
+#let lead-key-re = regex("^([^：:，,。；;、]{1,14})[：:]\s*")
+#let subhead-re = regex("^[^：:，,。；;]{1,12}[：:]\s*$")
+#let is-subhead(s) = s.trim().match(subhead-re) != none
+#let subhead(s) = block(above: 0pt, below: 0pt,
+  text(weight: "bold", fill: accent)[#s.trim().trim(regex("[：:]"), at: end)])
+#let bullet(s) = {
+  let key = s.match(lead-key-re)
+  if key != none and key.end < s.len() {
+    bullet-of({ text(weight: "bold")[#key.captures.at(0)]; [：]; emphasize(s.slice(key.end)) })
+  } else {
+    bullet-of(emphasize(s))
+  }
+}
+// 小标题与紧随其后的第一条要点绑在一起，避免分页时小标题落在页底
+#let bullets(arr) = {
+  let out = ()
+  let pending = none
+  for b in nonempty(arr) {
+    if is-subhead(b) {
+      if pending != none { out.push(pending) }
+      pending = subhead(b)
+    } else if pending != none {
+      out.push(block(breakable: false, { pending; v(lead * 0.6, weak: true); bullet(b) }))
+      pending = none
+    } else {
+      out.push(bullet(b))
+    }
+  }
+  if pending != none { out.push(pending) }
+  out
+}
 
-// 技术栈标签：底色用 outset 画在行框之外，不改变行高，所以有无标签的行距一致
-#let tag(s) = box(
-  fill: tint,
-  radius: 0.22em,
-  inset: (x: 0.38em),
-  outset: (y: 0.2em),
-  text(size: meta-size, fill: accent)[#s],
-)
-#let tags(arr) = arr.map(tag).join(h(0.4em))
+// 技术栈：强调色文字、细圆点分隔。打印比底色标签干净，也更省地方
+#let tech-sep = text(fill: hairline.darken(20%))[#h(0.3em)·#h(0.3em)]
+#let tech-text(arr) = text(size: meta-size, fill: accent, arr.map(s => box[#s]).join(tech-sep))
 
-// 简介 + 技术栈：默认分两行；紧凑变体合并成一行
-#let meta-lines(item) = {
+// 条目标题下的一行：简介（灰）+ 技术栈（强调色）+ 链接（灰）。三者都可缺省，挤不下时自然折行
+#let meta-label(s) = text(size: meta-size, weight: "bold", fill: ink)[#s：]
+#let meta-lines(item, url: none, summary-label: "简介") = {
+  let out = ()
   let s = get(item, "summary")
   let stack = nonempty(get(item, "techStack"))
-  if compact {
-    if s == none and stack.len() == 0 { return () }
-    (par(justify: false, {
-      if s != none { meta(s) }
-      if s != none and stack.len() > 0 { h(0.8em) }
-      if stack.len() > 0 { tags(stack) }
-    }),)
-  } else {
-    let out = ()
-    if s != none { out.push(meta(s)) }
-    if stack.len() > 0 { out.push(par(justify: false, tags(stack))) }
-    out
+  if s != none {
+    out.push(par(justify: true, { meta-label(summary-label); text(size: meta-size, fill: ink)[#s] }))
   }
+  if stack.len() > 0 or url != none {
+    let parts = ()
+    if stack.len() > 0 { parts.push({ meta-label("技术栈"); tech-text(stack) }) }
+    if url != none { parts.push(text(size: meta-size, fill: muted, url-link(url))) }
+    out.push(par(justify: false, parts.join(h(1.2em))))
+  }
+  out
 }
 
 // ---------------------------------------------------------------- 条目
@@ -266,9 +350,9 @@
   let lhs = {
     title-text(item.name)
     if has(item, "role") { sep; role-text(item.role) }
-    if has(item, "url") { sep; text(size: meta-size, fill: muted, url-link(item.url)) }
   }
-  item-units(headline(lhs, date-range(get(item, "start"), get(item, "end"))), bullets(get(item, "bullets")), metas: meta-lines(item))
+  // 链接放在下面那行末尾，不挤标题行（否则日期会被挤到第二行）
+  item-units(headline(lhs, date-range(get(item, "start"), get(item, "end"))), bullets(get(item, "bullets")), metas: meta-lines(item, url: get(item, "url"), summary-label: "项目简介"))
 }
 
 #let research-units(item) = {
@@ -307,11 +391,31 @@
   text(weight: "bold", fill: accent)[#c.name],
   par(justify: false)[#nonempty(c.items).join("、")],
 )
-#let skills-units(cats, width: text-width, allow-two-columns: true) = {
-  let cats = skill-cats(cats)
+// 技能描述句：句首是「Java 基础：……」时加粗冒号前的关键词；
+// 否则把句首的熟练度词（精通、熟悉、了解……）用强调色加粗，扫一眼就能看出深浅
+#let note-key-re = lead-key-re
+#let proficiency-re = regex("^(精通|熟练掌握|熟练使用|熟练|熟悉|掌握|理解|了解|擅长|具备|能够)")
+#let skill-note(s) = {
+  let key = s.match(note-key-re)
+  if key != none {
+    return bullet-of({ text(weight: "bold")[#key.captures.at(0)]; [：]; emphasize(s.slice(key.end)) })
+  }
+  let level = s.match(proficiency-re)
+  if level != none {
+    return bullet-of({ text(weight: "bold", fill: accent)[#level.text]; emphasize(s.slice(level.end)) })
+  }
+  bullet(s)
+}
+#let skill-notes(data) = nonempty(data.at("notes", default: none))
+#let has-skill-notes(m) = m.type == "skills" and skill-notes(m.data).len() > 0
+
+// 一个技能模块的全部单元：先列分类，再列描述句（两者都可以为空）
+#let skills-units(data, width: text-width, allow-two-columns: true) = {
+  let cats = skill-cats(data.categories)
+  let notes = skill-notes(data).map(skill-note)
   let label-w = 4.6em
   let row-gap = lead + t.paragraphGapMm * 1mm
-  if compact and allow-two-columns and cats.len() > 1 {
+  let rows = if compact and allow-two-columns and cats.len() > 1 {
     (context {
       let col = ((width - 1.5em) / 2).to-absolute() - label-w.to-absolute()
       let fits = cats.all(c => measure([#c.name]).width <= label-w.to-absolute() and measure([#nonempty(c.items).join("、")]).width <= col)
@@ -324,6 +428,7 @@
   } else {
     cats.map(skill-row)
   }
+  rows + notes
 }
 
 #let module-labels = (
@@ -335,14 +440,19 @@
   research: "科研经历",
   paper: "论文发表",
   award: "获奖情况",
+  summary: "自我评价",
 )
 
 // 模块 → 条目列表（每个条目是一组单元）
 #let module-items(m, skills-width: text-width, allow-two-columns: true) = {
   let ty = m.type
-  if ty == "skills" { return (skills-units(m.data.categories, width: skills-width, allow-two-columns: allow-two-columns),) }
+  if ty == "skills" { return (skills-units(m.data, width: skills-width, allow-two-columns: allow-two-columns),) }
   if ty == "paper" { return (m.data.items.map(paper-row),) }
   if ty == "award" { return (m.data.items.map(award-row),) }
+  if ty == "summary" {
+    let paras = m.data.text.split("\n").map(x => x.trim()).filter(x => x != "")
+    return (paras.map(x => par(justify: true, emphasize(x))),)
+  }
   let f = (
     education: education-units,
     work: experience-units,
@@ -375,7 +485,7 @@
 #let render-modules(modules, section-head, skills-width: text-width, allow-two-columns: true, after-head: 2mm) = {
   for (i, m) in modules.enumerate() {
     if i > 0 { gap(t.sectionGapMm) }
-    render-section(section-head(module-labels.at(m.type)), module-items(m, skills-width: skills-width, allow-two-columns: allow-two-columns), after-head: after-head)
+    render-section(section-head(module-labels.at(m.type), m.type), module-items(m, skills-width: skills-width, allow-two-columns: allow-two-columns), after-head: after-head)
   }
 }
 

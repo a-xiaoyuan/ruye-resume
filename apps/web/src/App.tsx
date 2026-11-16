@@ -12,20 +12,25 @@ import {
   type PageMode,
   type RuyeDocument,
 } from "../../../packages/schema/src/index.ts";
-import { A4_HEIGHT_MM, findMissingChars, type PageHeight } from "../../../packages/engine/src/index.ts";
+import { findMissingChars } from "../../../packages/engine/src/index.ts";
 import { sortByRecommended } from "../../../packages/templates/src/index.ts";
-import { loadRuntime, type Runtime } from "./runtime.ts";
-import { download, loadOutcome, openSession, saveCurrent, saveStatusText, type SaveMode } from "./storage.ts";
-import { addModule, removeModule, syncTitle } from "./doc-ops.ts";
+import { createLayoutClient } from "./layout-client.ts";
+import { deleteDocument, download, listDocuments, loadDocument, loadOutcome, newDocumentId, openSession, saveCurrent, saveStatusText, setCurrentId, type SaveMode, putDocument } from "./storage.ts";
+import { DocSwitcher } from "./components/DocSwitcher.tsx";
+import { addModule, duplicateDocument, removeModule, setAlias, syncTitle } from "./doc-ops.ts";
 import { ModuleNav } from "./components/ModuleNav.tsx";
 import { ModuleEditor } from "./components/ModuleEditor.tsx";
 import { Preview, type PreviewData } from "./components/Preview.tsx";
-import { StylePanel } from "./components/StylePanel.tsx";
+import { StylePanel, StyleSummary } from "./components/StylePanel.tsx";
+import { Icon } from "./components/icons.tsx";
+import { AccountMenu, useCloudSync } from "./components/AccountMenu.tsx";
+import fullSample from "../../../fixtures/full.ruye.json";
 import shortSample from "../../../fixtures/short.ruye.json";
 import mediumSample from "../../../fixtures/medium.ruye.json";
 import longSample from "../../../fixtures/long.ruye.json";
 
 const SAMPLES: Record<string, RuyeDocument> = {
+  full: fullSample as RuyeDocument,
   short: shortSample as RuyeDocument,
   medium: mediumSample as RuyeDocument,
   long: longSample as RuyeDocument,
@@ -108,19 +113,26 @@ function Menu({ label, items, onPick, right }: { label: string; items: MenuItem[
 }
 
 export function App() {
-  const opened = useMemo(() => openSession(loadOutcome(), structuredClone(SAMPLES.short)), []);
+  const opened = useMemo(() => openSession(loadOutcome(), structuredClone(SAMPLES.full)), []);
   const [doc, setDoc] = useState<RuyeDocument>(opened.doc);
+  const [sideTab, setSideTab] = useState<"content" | "style">("content");
   const [isSample, setIsSample] = useState(opened.isSample);
   const [persist, setPersist] = useState(opened.persist);
   const [writeMode, setWriteMode] = useState<SaveMode>("merge");
   const [savePhase, setSavePhase] = useState<"blocked" | "pending" | "saved" | "failed">(opened.persist ? "pending" : "blocked");
-  const storageId = opened.storageId;
+  // 当前简历的存档 id。切换、新建、复制时改变
+  const [docId, setDocId] = useState<string>(() => opened.storageId ?? newDocumentId());
+  // 首次打开时自动载入、还没被改过的示例：新建或导入时直接复用它的存档位置，免得列表里堆示例
+  const pristineSample = useRef<string | null>(opened.isSample ? docId : null);
   const [rawBackup, setRawBackup] = useState<string | null>(opened.rawBackup);
   const [activeId, setActiveId] = useState<string | null>(() => opened.doc.modules[0]?.id ?? null);
-  const [runtime, setRuntime] = useState<Runtime | null>(null);
+  // 排版在 Web Worker 里跑（不支持时自动退回主线程）；ready 之后才有字符表
+  const layout = useMemo(() => createLayoutClient(), []);
+  const [engineReady, setEngineReady] = useState<{ charset: string } | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewData | null>(null);
   const [busy, setBusy] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(opened.notice ? { text: opened.notice, level: "error", sticky: true } : null);
   const [overflowDialog, setOverflowDialog] = useState(false);
   const [zoom, setZoom] = useState(1);
@@ -135,6 +147,7 @@ export function App() {
 
   // 撤销只保存「删除前」的整份文档；删除之后又有新编辑时，撤销会连新编辑一起丢掉，所以此时让撤销失效
   const update = (next: RuyeDocument) => {
+    pristineSample.current = null;
     if (persist) setSavePhase("pending");
     setNotice((n) => (n?.undo ? null : n));
     setDoc(syncTitle(next));
@@ -143,17 +156,83 @@ export function App() {
     setDoc(syncTitle(next));
     setNotice({ text: `已删除${what}。`, undo: doc });
   };
-  const replaceAll = (next: RuyeDocument) => {
-    setPersist(true);
-    setWriteMode("replace");
+  /**
+   * 新建 / 载入示例 / 导入 / 复制：都另存为一份新简历，不覆盖当前这份。
+   * 只有本地存档读不出来（persist 为 false）时才用 replace 写入——那是用户明确要重新开始。
+   */
+  const startNew = (next: RuyeDocument) => {
+    if (!persist && !confirm("本地存档无法读取。继续会用这份新简历覆盖它（可以先点「下载原始存档」备份）。继续？")) return;
+    const reuse = pristineSample.current === docId;
+    const id = reuse ? docId : newDocumentId();
+    pristineSample.current = null;
+    if (persist) {
+      setWriteMode("merge");
+    } else {
+      setPersist(true);
+      setWriteMode("replace");
+    }
     setSavePhase("pending");
+    setDocId(id);
     setDoc(next);
     setActiveId(next.modules[0]?.id ?? null);
     setIsSample(false);
+    setNotice(null);
   };
+  const replaceAll = startNew;
+
+  function openDocument(id: string) {
+    const r = loadDocument(id);
+    if (!r) return setNotice({ text: "这份简历无法打开（存档可能已被其他标签页修改）。", level: "error" });
+    pristineSample.current = null;
+    setCurrentId(id);
+    setDocId(id);
+    setDoc(r.doc);
+    setActiveId(r.doc.modules[0]?.id ?? null);
+    setIsSample(false);
+    setNotice(r.issues.length ? { text: `已打开。有 ${r.issues.length} 处格式问题需要修正。`, level: "error", sticky: true } : null);
+  }
+
+  function deleteDoc(id: string, label: string) {
+    if (!confirm(`删除「${label}」？删除后不能恢复，需要的话先导出备份。`)) return;
+    const err = deleteDocument(id);
+    if (err) return setNotice({ text: err, level: "error", sticky: true });
+    if (id !== docId) return;
+    // 删的是当前这份：打开剩下最近的一份；一份都不剩就新建空白
+    const next = listDocuments().find((d) => d.id !== id);
+    if (next) openDocument(next.id);
+    else startNew(createEmptyDocument());
+  }
+
+  // 可选云同步：只有配置了后端地址才启用。本机仍是主副本
+  const cloud = useCloudSync({
+    revision: doc,
+    store: {
+      list: () =>
+        listDocuments()
+          // 首次打开时自动载入、还没改过的示例不上传
+          .filter((d) => d.id !== pristineSample.current)
+          .flatMap((d) => {
+            const r = loadDocument(d.id);
+            return r ? [{ id: d.id, doc: r.doc }] : [];
+          }),
+      put: putDocument,
+      newId: newDocumentId,
+      // 当前这份只有在已经写入本机后才允许被云端版本替换
+      canReplace: (id) => id !== docId || savePhase === "saved",
+    },
+    onReplaced: (ids) => {
+      if (!ids.includes(docId)) return;
+      const r = loadDocument(docId);
+      if (r) {
+        setDoc(r.doc);
+        setNotice({ text: "这份简历在其他设备上更新过，已载入最新版本。" });
+      }
+    },
+    onNotice: (text, level) => setNotice({ text, level, sticky: level === "error" }),
+  });
 
   useEffect(() => {
-    loadRuntime().then(setRuntime, (e: Error) => setFatal(e.message));
+    layout.ready.then(setEngineReady, (e: Error) => setFatal(e.message));
   }, []);
 
   // 提示自动消退：示例引导 9 秒，普通通知 6 秒；错误与可撤销通知常驻，由用户关闭
@@ -174,7 +253,7 @@ export function App() {
       setSavePhase("blocked");
       return;
     }
-    const err = saveCurrent(doc, storageId ?? undefined, writeMode);
+    const err = saveCurrent(doc, docId, writeMode);
     if (err) {
       setSavePhase("failed");
       setNotice({ text: `${err}屏幕上的内容还在。`, level: "error", sticky: true });
@@ -182,59 +261,50 @@ export function App() {
       setSavePhase("saved");
       if (writeMode === "replace") setWriteMode("merge");
     }
-  }, [doc, persist, storageId, writeMode]);
+  }, [doc, persist, docId, writeMode]);
 
-  // 300ms 防抖后重新排版。预览和导出用同一个引擎、同一套 token 与页高
+  // 防抖后重新排版。排版在 Worker 里跑，不卡输入；连续修改时只排最新的一版
   useEffect(() => {
-    if (!runtime) return;
-    const template = runtime.templates.get(doc.layout.templateId) ?? runtime.templates.get("campus-serif")!;
+    if (!engineReady) return;
     let cancelled = false;
     const timer = setTimeout(async () => {
       setBusy(true);
       try {
-        const result = await runtime.engine.layout(doc, template, mode);
-        // 溢出时按内容实际高度渲染，让用户看见页外的部分，而不是假装没有
-        const showAuto = result.status === "overflow";
-        const height: PageHeight = showAuto ? "auto" : result.pageHeight;
-        const svg = await runtime.engine.svg(doc, template, result.tokens, height);
-        const boardMm =
-          result.status === "paginated" ? result.metrics.pageCount * A4_HEIGHT_MM : showAuto ? result.metrics.contentHeightMm : result.metrics.pageHeightMm;
-        if (!cancelled) setPreview({ svg, result, boardMm });
+        const data = await layout.preview(doc, mode);
+        if (!cancelled && data) setPreview(data);
       } catch (e) {
         if (!cancelled) setNotice({ text: `排版失败：${(e as Error).message}`, level: "error" });
       } finally {
         if (!cancelled) setBusy(false);
       }
-    }, 300);
+    }, 200);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [runtime, doc, mode]);
+  }, [engineReady, layout, doc, mode]);
 
   async function exportPdf(as: PageMode = mode) {
     setOverflowDialog(false);
-    if (!runtime) return;
+    if (!engineReady) return;
     const ok = checkExportable(doc);
     if (!ok.ok) return setNotice({ text: ok.message, level: "error" });
-    const missing = findMissingChars(doc, runtime.charset);
+    const missing = findMissingChars(doc, engineReady.charset);
     if (missing.length > 0) {
       return setNotice({ text: `内置字体缺少这些字：${missing.slice(0, 20).join(" ")}。导出后会显示为方块，请改字或使用完整字体（见 docs/fonts.md）。`, level: "error" });
     }
-    const template = runtime.templates.get(doc.layout.templateId) ?? runtime.templates.get("campus-serif")!;
-    setBusy(true);
+    setExporting(true);
     try {
-      const r = await runtime.engine.layout(doc, template, as);
-      if (r.status === "overflow") return setOverflowDialog(true);
-      if (r.status === "too-long") return setNotice({ text: r.suggestions?.[0] ?? "内容过长", level: "error" });
-      // exportPdf 会读取 PDF 自身的页数并与排版结果核对，不一致时直接报错
-      const { pdf } = await runtime.engine.exportPdf(doc, template, r);
-      download(`${exportBaseName(doc)}.pdf`, pdf as Uint8Array<ArrayBuffer>, "application/pdf");
+      // 排版、导出、核对 PDF 自身页数都在排版服务里完成
+      const outcome = await layout.exportPdf(doc, as);
+      if (outcome.kind === "overflow") return setOverflowDialog(true);
+      if (outcome.kind === "too-long") return setNotice({ text: outcome.message, level: "error" });
+      download(`${exportBaseName(doc)}.pdf`, outcome.pdf as Uint8Array<ArrayBuffer>, "application/pdf");
       if (as === "continuous") setNotice({ text: "无损长一页适合屏幕投递；若需要打印在 A4 纸上，请改用标准分页或 A4 智能一页。" });
     } catch (e) {
       setNotice({ text: `导出失败：${(e as Error).message}`, level: "error" });
     } finally {
-      setBusy(false);
+      setExporting(false);
     }
   }
 
@@ -272,9 +342,10 @@ export function App() {
 
   function onFileMenu(key: string) {
     if (key === "import") fileInput.current?.click();
-    else if (key === "new" && confirm("新建空白简历会替换当前内容（可先导出备份）。继续？")) replaceAll(createEmptyDocument());
-    else if (key.startsWith("sample:") && confirm("载入示例会替换当前内容（可先导出备份）。继续？")) {
-      replaceAll(structuredClone(SAMPLES[key.slice(7)]));
+    // 新建和载入示例都另存为新的一份，当前简历留在「我的简历」里，不用再确认
+    else if (key === "new") startNew(createEmptyDocument());
+    else if (key.startsWith("sample:")) {
+      startNew(structuredClone(SAMPLES[key.slice(7)]));
       setIsSample(true);
     }
   }
@@ -302,21 +373,35 @@ export function App() {
           <span className="version">v0.1</span>
         </div>
 
-        <div className="doc-meta" title="标题由姓名与求职意向自动生成">
-          <span className="doc-title">{doc.meta.title}</span>
+        <DocSwitcher
+          currentId={docId}
+          currentLabel={doc.meta.alias?.trim() || doc.meta.title}
+          currentAlias={doc.meta.alias ?? ""}
+          listDocuments={listDocuments}
+          onOpen={openDocument}
+          onNew={() => startNew(createEmptyDocument())}
+          onDuplicate={() => {
+            startNew(duplicateDocument(doc));
+            setNotice({ text: "已复制为一份新简历，可以改成投另一个岗位的版本。原来那份还在「我的简历」里。" });
+          }}
+          onDelete={deleteDoc}
+          onAlias={(alias) => update(setAlias(doc, alias))}
+        >
           <span className={`save-state${savePhase === "failed" || savePhase === "blocked" ? " blocked" : savePhase === "pending" ? " pending" : issues.length > 0 ? " warn" : ""}`}>
             <i aria-hidden="true" />
             {saveStatusText(savePhase, issues.length)}
           </span>
-        </div>
+        </DocSwitcher>
 
         <div className="actions">
+          <AccountMenu cloud={cloud} />
           <Menu
             label="文件"
             onPick={onFileMenu}
             items={[
               { key: "import", label: "导入简历", hint: ".ruye.json / .md" },
               { key: "new", label: "新建空白简历" },
+              { key: "sample:full", label: "载入示例", hint: "完整" },
               { key: "sample:short", label: "载入示例", hint: "短" },
               { key: "sample:medium", label: "载入示例", hint: "中" },
               { key: "sample:long", label: "载入示例", hint: "长" },
@@ -331,7 +416,7 @@ export function App() {
             ]}
           />
           <input ref={fileInput} type="file" accept=".json,.md,.txt" hidden onChange={(e) => (e.target.files?.[0] && importFile(e.target.files[0]), (e.target.value = ""))} />
-          <button className="primary" disabled={!runtime || busy} onClick={() => exportPdf()}>
+          <button className="primary" disabled={!engineReady || exporting} onClick={() => exportPdf()}>
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path d="M8 2v8m0 0L5 7m3 3 3-3M3 12.5h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
@@ -382,15 +467,31 @@ export function App() {
 
       <main className="panes">
         <aside className="sidebar">
-          <StylePanel doc={doc} onChange={update} />
-          <ModuleNav
-            doc={doc}
-            activeId={activeId}
-            onSelect={setActiveId}
-            onChange={update}
-            onAdd={addNewModule}
-            onSortRecommended={() => update(sortByRecommended(doc, doc.layout.templateId))}
-          />
+          <div className="side-tabs" role="tablist" aria-label="左栏">
+            <button type="button" role="tab" aria-selected={sideTab === "content"} className={sideTab === "content" ? "on" : ""} onClick={() => setSideTab("content")}>
+              <Icon name="layers" size={15} />
+              内容
+            </button>
+            <button type="button" role="tab" aria-selected={sideTab === "style"} className={sideTab === "style" ? "on" : ""} onClick={() => setSideTab("style")}>
+              <Icon name="palette" size={15} />
+              模板与样式
+            </button>
+          </div>
+          {sideTab === "content" ? (
+            <>
+              <StyleSummary doc={doc} onOpen={() => setSideTab("style")} />
+              <ModuleNav
+                doc={doc}
+                activeId={activeId}
+                onSelect={setActiveId}
+                onChange={update}
+                onAdd={addNewModule}
+                onSortRecommended={() => update(sortByRecommended(doc, doc.layout.templateId))}
+              />
+            </>
+          ) : (
+            <StylePanel doc={doc} onChange={update} />
+          )}
         </aside>
 
         <section className="editor" aria-label="编辑">

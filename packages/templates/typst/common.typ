@@ -37,6 +37,16 @@
 #let page-height = if spec.height == "auto" { auto } else { spec.height * 1mm }
 #let page-margin = (top: margin.top * 1mm, bottom: margin.bottom * 1mm, left: margin.left * 1mm, right: margin.right * 1mm)
 
+// 页脚页码：只在实际超过一页时出现（标准分页），印在下页边里，不占版心、不影响测量。
+// 页数来自 Typst 的分页结果本身，所以 PDF、预览、界面显示的页数是同一个数。
+#let page-footer = context {
+  let total = counter(page).final().first()
+  if total > 1 {
+    set text(size: meta-size, fill: muted, top-edge: "cap-height", bottom-edge: "baseline")
+    align(right, [#counter(page).display() / #total])
+  }
+}
+
 // ---------------------------------------------------------------- 工具函数
 
 #let has(d, k) = type(d) == dictionary and k in d and d.at(k) != none and d.at(k) != ""
@@ -55,7 +65,17 @@
 
 #let meta(s) = text(size: meta-size, fill: muted)[#s]
 #let pretty-url(u) = u.replace(regex("^https?://"), "").replace(regex("^mailto:"), "").replace(regex("/$"), "")
-#let url-link(u) = link(u)[#pretty-url(u)]
+// 链接安全：只为 http、https、mailto 生成可点击链接；没写协议的网址（github.com/xx）补 https://；
+// 其他协议（javascript:、data: 等）只显示文字，不生成链接——预览 SVG 会插进编辑器页面，不能让它执行脚本
+#let safe-url(u) = {
+  if u.match(regex("(?i)^(https?://|mailto:)")) != none { u }
+  else if u.match(regex("^[A-Za-z][A-Za-z0-9+.-]*:")) != none { none }
+  else { "https://" + u }
+}
+#let url-link(u) = {
+  let target = safe-url(u)
+  if target == none { [#pretty-url(u)] } else { link(target)[#pretty-url(u)] }
+}
 #let dot(size, color) = box(baseline: -0.32em, circle(radius: size / 2, fill: color))
 
 #let title-text(s) = text(weight: "bold")[#s]
@@ -209,18 +229,20 @@
 // 每个条目返回一组「单元」（content 数组）。第一个单元是不可拆分的「标题 + 第一行」，
 // 保证标准分页时条目标题不会孤零零落在页底。
 
-#let item-units(head, lines) = {
+// metas：标题下的简介、技术栈行；lines：要点。标题、全部 metas 与第一条要点绑成一个不可拆分的单元，
+// 这样标准分页时不会出现「标题和简介在页底、要点全在下一页」的情况
+#let item-units(head, lines, metas: ()) = {
+  let metas = metas.filter(x => x != none).map(x => block(x))
   let lines = lines.filter(x => x != none).map(x => block(x))
-  if lines.len() == 0 {
-    (block(breakable: false, head),)
-  } else {
-    let first = block(breakable: false, {
-      head
+  let keep = metas + lines.slice(0, calc.min(1, lines.len()))
+  let first = block(breakable: false, {
+    head
+    for u in keep {
       gap(t.paragraphGapMm)
-      lines.at(0)
-    })
-    (first,) + lines.slice(1)
-  }
+      u
+    }
+  })
+  (first,) + lines.slice(calc.min(1, lines.len()))
 }
 
 #let education-units(item) = {
@@ -237,7 +259,7 @@
     title-text(item.org)
     if has(item, "title") { sep; role-text(item.title) }
   }
-  item-units(headline(lhs, date-range(get(item, "start"), get(item, "end"))), meta-lines(item) + bullets(get(item, "bullets")))
+  item-units(headline(lhs, date-range(get(item, "start"), get(item, "end"))), bullets(get(item, "bullets")), metas: meta-lines(item))
 }
 
 #let project-units(item) = {
@@ -246,7 +268,7 @@
     if has(item, "role") { sep; role-text(item.role) }
     if has(item, "url") { sep; text(size: meta-size, fill: muted, url-link(item.url)) }
   }
-  item-units(headline(lhs, date-range(get(item, "start"), get(item, "end"))), meta-lines(item) + bullets(get(item, "bullets")))
+  item-units(headline(lhs, date-range(get(item, "start"), get(item, "end"))), bullets(get(item, "bullets")), metas: meta-lines(item))
 }
 
 #let research-units(item) = {

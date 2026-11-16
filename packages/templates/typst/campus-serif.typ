@@ -6,6 +6,7 @@
   width: 210mm,
   height: page-height,
   margin: page-margin,
+  footer: page-footer,
   background: place(top + left, rect(width: 100%, height: 2.2mm, fill: accent)),
 )
 // 文字盒高度固定为 1em，于是行距 = lineHeight × 字号，和 CSS 的 line-height 语义一致

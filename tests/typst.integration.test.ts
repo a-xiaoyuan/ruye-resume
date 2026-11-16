@@ -5,7 +5,7 @@ import { before, describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import type { RuyeDocument } from "../packages/schema/src/index.ts";
-import { A4_HEIGHT_MM, findMissingChars, LayoutEngine, parseSvgSize, PT_PER_MM, READABILITY_FLOOR } from "../packages/engine/src/index.ts";
+import { A4_HEIGHT_MM, countPdfPages, findMissingChars, LayoutEngine, parseSvgPages, parseSvgSize, pdfPageHeightsMm, PT_PER_MM, READABILITY_FLOOR } from "../packages/engine/src/index.ts";
 import { loadNodeTemplates } from "../packages/templates/src/node.ts";
 import { loadCharset, loadNodeTypst } from "../scripts/typst-node.ts";
 
@@ -145,6 +145,59 @@ describe("Typst 黄金测试", { skip }, () => {
     for (const t of templates.values()) {
       const svg = await engine.svg(doc, t, t.defaultTokens, A4_HEIGHT_MM);
       assert.ok(svg.includes("typst-doc"), t.id);
+    }
+  });
+
+  test("真实页码：三套模板 × 三份样本 × 三种模式，PDF 自身的页数与高度都和排版结果一致", async () => {
+    for (const t of templates.values()) {
+      for (const name of ["short", "medium", "long"]) {
+        for (const mode of ["standard", "fit-a4", "continuous"] as const) {
+          const doc = load(name);
+          const r = await engine.layout(doc, t, mode);
+          const where = `${t.id}/${name}/${mode}`;
+          if (r.status === "overflow" || r.status === "too-long") {
+            await assert.rejects(engine.exportPdf(doc, t, r), /失败状态/, where);
+            continue;
+          }
+          const { pdf, pageCount } = await engine.exportPdf(doc, t, r);
+          assert.equal(pageCount, r.metrics.pageCount, where);
+          assert.equal(countPdfPages(pdf), r.metrics.pageCount, where);
+          const heights = pdfPageHeightsMm(pdf);
+          assert.equal(heights.length, r.metrics.pageCount, where);
+          for (const h of heights) assert.ok(Math.abs(h - r.metrics.pageHeightMm) < 1, `${where}: PDF 页高 ${h.toFixed(1)}mm，排版结果 ${r.metrics.pageHeightMm}mm`);
+          if (mode !== "standard") assert.equal(pageCount, 1, where);
+        }
+      }
+    }
+  });
+
+  test("页码只在多页时印出，且与实际页数一致", async () => {
+    for (const t of templates.values()) {
+      const long = await engine.standard(load("long"), t);
+      const short = await engine.standard(load("short"), t);
+      const svgLong = await engine.svg(load("long"), t, long.tokens, A4_HEIGHT_MM);
+      const svgShort = await engine.svg(load("short"), t, short.tokens, A4_HEIGHT_MM);
+      const n = long.metrics.pageCount;
+      assert.equal(parseSvgPages(svgLong)?.length, n, t.id);
+      if (n > 1) {
+        for (let i = 1; i <= n; i++) assert.ok(svgLong.includes(`>${i} / ${n}<`), `${t.id} 缺少页码 ${i} / ${n}`);
+      }
+      assert.equal(short.metrics.pageCount, 1, t.id);
+      assert.ok(!/>\d+ \/ \d+</.test(svgShort), `${t.id} 单页不应印页码`);
+    }
+  });
+
+  test("javascript: 链接不会出现在预览 SVG 里；没写协议的网址补 https://", async () => {
+    const doc = load("short");
+    if (doc.modules[0].type === "basic_info") {
+      doc.modules[0].data.github = "javascript:alert(document.cookie)";
+      doc.modules[0].data.website = "example.com/me";
+    }
+    for (const t of templates.values()) {
+      const svg = await engine.svg(doc, t, t.defaultTokens, A4_HEIGHT_MM);
+      // 文字本身照常显示；不允许的是带 javascript: 的可点击链接
+      assert.ok(!/href\s*=\s*["']\s*javascript:/i.test(svg), t.id);
+      assert.ok(svg.includes('href="https://example.com/me"'), t.id);
     }
   });
 

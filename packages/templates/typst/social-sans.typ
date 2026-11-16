@@ -2,7 +2,7 @@
 // 全无衬线、信息密度更高。页眉左侧姓名与意向，右侧联系方式竖排；模块标题是浅色底带。原创版式。
 #import "common.typ": *
 
-#set page(width: 210mm, height: page-height, margin: page-margin)
+#set page(width: 210mm, height: page-height, margin: page-margin, footer: page-footer)
 #set text(font: sans, size: body-size, fill: ink, lang: "zh", region: "cn", top-edge: 0.88em, bottom-edge: -0.12em)
 #set par(leading: lead, spacing: lead, justify: true)
 #set block(spacing: 0pt)

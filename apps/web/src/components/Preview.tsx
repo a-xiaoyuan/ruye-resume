@@ -74,13 +74,10 @@ export function Preview({ data, error, busy, zoom, onZoom }: Props) {
                   <span>A4 底边 · 以下超出约 {Math.round(r.metrics.overflowMm)}mm</span>
                 </div>
               )}
+              {/* 分页线：页码由 Typst 印在每页页脚，这里只标出页与页的分界 */}
               {r.status === "paginated" &&
-                Array.from({ length: r.metrics.pageCount }, (_, i) => (
-                  <div key={i} className="page-break" style={{ top: `${((i + 1) * A4_HEIGHT_MM * 100) / data.boardMm}%` }}>
-                    <span>
-                      {i + 1} / {r.metrics.pageCount}
-                    </span>
-                  </div>
+                Array.from({ length: r.metrics.pageCount - 1 }, (_, i) => (
+                  <div key={i} className="page-break" style={{ top: `${((i + 1) * A4_HEIGHT_MM * 100) / data.boardMm}%` }} aria-hidden="true" />
                 ))}
             </div>
           </div>
@@ -88,7 +85,7 @@ export function Preview({ data, error, busy, zoom, onZoom }: Props) {
             {r.status === "continuous"
               ? `长画板，总高度约 ${(r.metrics.pageHeightMm / A4_HEIGHT_MM).toFixed(2)} 页 A4（不是标准打印纸）`
               : r.status === "paginated"
-                ? `共 ${r.metrics.pageCount} 页 · 预览与导出 PDF 同源`
+                ? `共 ${r.metrics.pageCount} 页（页码印在 PDF 页脚）· 预览与导出 PDF 同源`
                 : "A4 · 210 × 297 mm · 预览与导出 PDF 同源"}
           </div>
         </>

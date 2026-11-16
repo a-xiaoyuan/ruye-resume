@@ -133,13 +133,15 @@ export function App() {
   const mode = doc.layout.pageMode;
   const active = doc.modules.find((m) => m.id === activeId) ?? null;
 
+  // 撤销只保存「删除前」的整份文档；删除之后又有新编辑时，撤销会连新编辑一起丢掉，所以此时让撤销失效
   const update = (next: RuyeDocument) => {
     if (persist) setSavePhase("pending");
+    setNotice((n) => (n?.undo ? null : n));
     setDoc(syncTitle(next));
   };
   const remove = (next: RuyeDocument, what: string) => {
+    setDoc(syncTitle(next));
     setNotice({ text: `已删除${what}。`, undo: doc });
-    update(next);
   };
   const replaceAll = (next: RuyeDocument) => {
     setPersist(true);
@@ -225,7 +227,8 @@ export function App() {
       const r = await runtime.engine.layout(doc, template, as);
       if (r.status === "overflow") return setOverflowDialog(true);
       if (r.status === "too-long") return setNotice({ text: r.suggestions?.[0] ?? "内容过长", level: "error" });
-      const pdf = await runtime.engine.pdf(doc, template, r.tokens, r.pageHeight);
+      // exportPdf 会读取 PDF 自身的页数并与排版结果核对，不一致时直接报错
+      const { pdf } = await runtime.engine.exportPdf(doc, template, r);
       download(`${exportBaseName(doc)}.pdf`, pdf as Uint8Array<ArrayBuffer>, "application/pdf");
       if (as === "continuous") setNotice({ text: "无损长一页适合屏幕投递；若需要打印在 A4 纸上，请改用标准分页或 A4 智能一页。" });
     } catch (e) {

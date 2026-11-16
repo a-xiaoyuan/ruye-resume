@@ -57,6 +57,8 @@ export function toMarkdown(doc: RuyeDocument): string {
     const hidden = m.visible ? "" : " <!-- hidden -->";
     if (m.type === "basic_info") {
       out.push(`# ${m.data.name}${hidden}`);
+      // 照片用标准 Markdown 图片语法内嵌（data URL），文件自包含，普通阅读器里也能看到
+      if (m.data.photoDataUrl) out.push(`![照片](${m.data.photoDataUrl})`);
       for (const [k, label] of BASIC_FIELDS) out.push(...kv(label, m.data[k]));
       for (const l of m.data.customLinks ?? []) out.push(`- ${l.label}：${l.url}`);
       out.push("");
@@ -347,6 +349,15 @@ export function fromMarkdown(src: string): MarkdownImportResult {
     let m: RegExpMatchArray | null;
     if (skipping && !/^#{1,2}\s/.test(line)) continue;
     skipping = false;
+    // 图片：基本信息里的内嵌图片还原成照片；远程图片不下载（简历内容不出浏览器），给出提示
+    if ((m = line.match(/^!\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)$/))) {
+      const src = m[1];
+      const cur = current as Module | null;
+      if (cur?.type !== "basic_info") warnings.push("图片只能放在姓名（# 标题）下方作为照片，其他位置的图片已忽略");
+      else if (!/^data:image\/(png|jpe?g|gif|webp);base64,/.test(src)) warnings.push(`照片只支持内嵌图片（data:image/…;base64），不会下载远程图片，已忽略：${src.slice(0, 60)}`);
+      else cur.data.photoDataUrl = src;
+      continue;
+    }
     if ((m = line.match(/^#\s+(.*)$/))) {
       const { text, hidden } = stripHidden(m[1]);
       const b = basic();

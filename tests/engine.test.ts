@@ -10,9 +10,14 @@ import {
   LayoutEngine,
   parseSvgSize,
   READABILITY_FLOOR,
+  sanitizeSvgLinks,
+  parseSvgPages,
+  countPdfPages,
+  pdfPageHeightsMm,
+  findMissingChars,
   type TypographyTokens,
 } from "../packages/engine/src/index.ts";
-import { sortByRecommended, TEMPLATE_META } from "../packages/templates/src/index.ts";
+import { decodeDataUrl, sortByRecommended, TEMPLATE_META } from "../packages/templates/src/index.ts";
 import { loadNodeTemplates } from "../packages/templates/src/node.ts";
 import { FakeBackend } from "./helpers/fake-backend.ts";
 
@@ -191,4 +196,58 @@ test("测量结果有缓存：相同输入不重复编译", async () => {
   const n = backend.calls;
   await engine.contentHeightMm(doc, template, template.defaultTokens);
   assert.equal(backend.calls, n);
+});
+
+test("预览 SVG 只保留安全链接", () => {
+  const svg = `<svg><a target="_blank" xlink:href="javascript:alert(1)"><use xlink:href="#g1"/></a><a href='JavaScript:x'></a><a xlink:href="https://a.com"></a><a xlink:href="mailto:a@b.c"></a><a href="data:text/html,1"></a></svg>`;
+  const out = sanitizeSvgLinks(svg);
+  assert.ok(!/javascript:/i.test(out) && !out.includes("data:"));
+  assert.ok(out.includes('xlink:href="#g1"') && out.includes("https://a.com") && out.includes("mailto:a@b.c"));
+});
+
+test("照片数据损坏或格式不符时跳过照片，不让整份文档失败", () => {
+  const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==";
+  assert.ok(decodeDataUrl(`data:image/png;base64,${png}`));
+  assert.equal(decodeDataUrl("data:image/png;base64,@@@@"), null);
+  assert.equal(decodeDataUrl(`data:image/jpeg;base64,${png}`), null, "声明是 JPEG，内容是 PNG");
+  assert.equal(decodeDataUrl("data:image/svg+xml;base64,PHN2Zy8+"), null);
+  const doc = load("short");
+  if (doc.modules[0].type === "basic_info") doc.modules[0].data.photoDataUrl = "data:image/png;base64,AAAA";
+  const input = template.build(doc, template.defaultTokens, 297);
+  assert.ok(!Object.keys(input.files).some((f) => f.startsWith("/photo")));
+});
+
+test("从 SVG 读出 Typst 实际分出的每一页", () => {
+  const svg = `<svg class="typst-doc" data-height="1684"><g class="typst-page" transform="translate(0, 0)" data-tid="a" data-page-width="596" data-page-height="842"></g><g class="typst-page" transform="translate(0, 842)" data-tid="b" data-page-width="596" data-page-height="842"></g></svg>`;
+  assert.deepEqual(parseSvgPages(svg), [{ heightPt: 842 }, { heightPt: 842 }]);
+  assert.equal(parseSvgPages("<svg data-height=\"10\"></svg>"), null);
+});
+
+test("读取 PDF 自身的页数与页面高度", () => {
+  const enc = (s: string) => new TextEncoder().encode(s);
+  const pdf = enc("%PDF-1.7\n1 0 obj\n<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>\nendobj\n3 0 obj\n<< /Type /Page /MediaBox [0 0 595.2756 841.8898] >>\nendobj\n4 0 obj\n<< /Type /Page /MediaBox [0 0 595.2756 841.8898] >>\nendobj");
+  assert.equal(countPdfPages(pdf), 2);
+  assert.equal(countPdfPages(enc("<< /Type /Page >> << /Type /Page >> << /Type /Page >>")), 3);
+  assert.equal(countPdfPages(enc("%PDF-1.7 nothing")), null);
+  assert.deepEqual(pdfPageHeightsMm(pdf).map((h) => Math.round(h)), [297, 297]);
+});
+
+test("exportPdf：PDF 页数与排版结果不符时拒绝导出", async () => {
+  const backend = new FakeBackend();
+  const engine = new LayoutEngine({ svg: (i) => backend.svg(i), pdf: async () => new TextEncoder().encode("<< /Type /Pages /Count 3 >>") });
+  const r = await engine.fitA4(load("short"), template);
+  await assert.rejects(engine.exportPdf(load("short"), template, r), /PDF 有 3 页，但排版结果是 1 页/);
+  const bad = await new LayoutEngine(backend).fitA4(inflate(load("long"), 2), template);
+  await assert.rejects(engine.exportPdf(load("long"), template, bad), /失败状态/);
+});
+
+test("缺字检查：列出子集外的字；完整字体（空字符表）不检查", () => {
+  const doc = load("short");
+  if (doc.modules[0].type === "basic_info") doc.modules[0].data.name = "林䶮夏";
+  const charset = "林夏" + doc.modules.map((m) => JSON.stringify(m.data)).join("");
+  const filtered = Array.from(charset).filter((c) => c !== "䶮").join("");
+  assert.deepEqual(findMissingChars(doc, filtered), ["䶮"]);
+  assert.deepEqual(findMissingChars(doc, ""), []);
+  if (doc.modules[0].type === "basic_info") doc.modules[0].visible = false;
+  assert.deepEqual(findMissingChars(doc, filtered), [], "隐藏模块不导出，不检查");
 });

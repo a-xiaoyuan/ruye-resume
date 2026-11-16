@@ -19,6 +19,8 @@ jobs:
       - run: pnpm typecheck
       # 单元测试不需要字体和 WASM；集成测试在字体存在时自动运行
       - run: pnpm test
+      # 子集化需要 fonttools；没有它会退回 27MB 的完整字体，部署出去的网页首次打开会慢很多
+      - run: pip install fonttools
       - run: pnpm fonts
       - run: pnpm test
       - run: pnpm build

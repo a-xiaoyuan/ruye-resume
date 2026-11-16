@@ -12,6 +12,7 @@
   width: 210mm,
   height: page-height,
   margin: page-margin,
+  footer: page-footer,
   background: place(top + left, rect(width: band-w, height: 100%, fill: tint)),
 )
 #set text(font: sans, size: body-size, fill: ink, lang: "zh", region: "cn", top-edge: 0.88em, bottom-edge: -0.12em)

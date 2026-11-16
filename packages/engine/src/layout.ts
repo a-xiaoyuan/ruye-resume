@@ -2,6 +2,7 @@
 // 所有高度都来自真实排版结果（后端编译出的 SVG 页面尺寸），不按字数估算。
 
 import { MODULE_LABELS, renderableModules, type Module, type PageMode, type RuyeDocument } from "../../schema/src/index.ts";
+import { sanitizeSvgLinks } from "./sanitize.ts";
 import { applyStep, FIT_STEPS, isDiscreteStep, STEP_LABELS, STEP_LEVELS } from "./tokens.ts";
 import {
   A4_HEIGHT_MM,
@@ -37,6 +38,38 @@ export function parseSvgSize(svg: string): { widthPt: number; heightPt: number }
   return { widthPt, heightPt };
 }
 
+/**
+ * 读取 typst.ts SVG 里的每一页：<g class="typst-page" ... data-page-height="842">。
+ * 这是 Typst 实际分出来的页，比「总高 ÷ 页高」可靠。注意 typst.ts 会把页面尺寸取整到 1pt（约 0.35mm）。
+ * 找不到分页标记时返回 null，由调用方退回按总高推算。
+ */
+export function parseSvgPages(svg: string): { heightPt: number }[] | null {
+  const pages = [...svg.matchAll(/<g\b[^>]*class="typst-page"[^>]*>/g)].map((m) => {
+    const h = m[0].match(/data-page-height="([0-9.]+)"/);
+    return { heightPt: h ? Number(h[1]) : NaN };
+  });
+  if (pages.length === 0 || pages.some((p) => !Number.isFinite(p.heightPt))) return null;
+  return pages;
+}
+
+/**
+ * 读取 PDF 自身的页数：页面树根节点的 /Count。读不到时数 /Type /Page 对象；仍读不到返回 null。
+ * Typst 输出的 PDF 不压缩对象字典（只压缩内容流），所以能直接读。
+ */
+export function countPdfPages(pdf: Uint8Array): number | null {
+  const text = new TextDecoder("latin1").decode(pdf);
+  const counts = [...text.matchAll(/\/Type\s*\/Pages\b[^>]*?\/Count\s+(\d+)|\/Count\s+(\d+)[^>]*?\/Type\s*\/Pages\b/g)].map((m) => Number(m[1] ?? m[2]));
+  if (counts.length > 0) return Math.max(...counts);
+  const pages = text.match(/\/Type\s*\/Page(?!s)\b/g);
+  return pages ? pages.length : null;
+}
+
+/** PDF 每页的 MediaBox 高度（mm）。读不到时返回空数组 */
+export function pdfPageHeightsMm(pdf: Uint8Array): number[] {
+  const text = new TextDecoder("latin1").decode(pdf);
+  return [...text.matchAll(/\/MediaBox\s*\[\s*([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s*\]/g)].map((m) => (Number(m[4]) - Number(m[2])) / PT_PER_MM);
+}
+
 const ptToMm = (pt: number) => pt / PT_PER_MM;
 const round1 = (x: number) => Math.round(x * 10) / 10;
 
@@ -53,13 +86,30 @@ export class LayoutEngine {
     this.backend = backend;
   }
 
-  /** 编译一次并返回 SVG（预览用）。和 pdf() 使用完全相同的输入 */
+  /** 编译一次并返回 SVG（预览用）。和 pdf() 使用完全相同的输入；返回前清理不安全的链接 */
   async svg(doc: RuyeDocument, template: TemplateDef, tokens: TypographyTokens, pageHeight: PageHeight): Promise<string> {
-    return this.backend.svg(template.build(renderableDoc(doc), tokens, pageHeight));
+    return sanitizeSvgLinks(await this.backend.svg(template.build(renderableDoc(doc), tokens, pageHeight)));
   }
 
   async pdf(doc: RuyeDocument, template: TemplateDef, tokens: TypographyTokens, pageHeight: PageHeight): Promise<Uint8Array> {
     return this.backend.pdf(template.build(renderableDoc(doc), tokens, pageHeight));
+  }
+
+  /**
+   * 按排版结果导出 PDF，并读取 PDF 自身的页数与排版结果核对。
+   * 不一致说明预览与导出出现了分歧：宁可报错，也不交出一份页数和界面说法不符的文件。
+   */
+  async exportPdf(doc: RuyeDocument, template: TemplateDef, result: FitResult): Promise<{ pdf: Uint8Array; pageCount: number }> {
+    if (result.status === "overflow" || result.status === "too-long") {
+      throw new Error("当前排版结果是失败状态，不能导出");
+    }
+    const pdf = await this.pdf(doc, template, result.tokens, result.pageHeight);
+    const pageCount = countPdfPages(pdf);
+    if (pageCount === null) throw new Error("无法读取导出 PDF 的页数，已停止导出");
+    if (pageCount !== result.metrics.pageCount) {
+      throw new Error(`导出的 PDF 有 ${pageCount} 页，但排版结果是 ${result.metrics.pageCount} 页，已停止导出`);
+    }
+    return { pdf, pageCount };
   }
 
   /** 不分页时的内容总高度（含页边距），mm。用 height: auto 编译一次得到 */
@@ -75,9 +125,12 @@ export class LayoutEngine {
     return p;
   }
 
-  /** 以固定页高编译，返回页数。typst.ts 的 SVG 把各页上下叠放，总高 / 页高 即页数 */
+  /** 以固定页高编译，返回 Typst 实际分出的页数 */
   async pageCount(doc: RuyeDocument, template: TemplateDef, tokens: TypographyTokens, pageHeightMm: number): Promise<number> {
     const svg = await this.backend.svg(template.build(renderableDoc(doc), tokens, pageHeightMm));
+    const pages = parseSvgPages(svg);
+    if (pages) return pages.length;
+    // 退路：各页上下叠放，总高 / 页高
     const totalMm = ptToMm(parseSvgSize(svg).heightPt);
     const n = totalMm / pageHeightMm;
     const rounded = Math.round(n);

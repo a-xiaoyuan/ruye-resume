@@ -60,6 +60,20 @@ function optString(ctx: Ctx, o: Record<string, unknown>, key: string, path: stri
   if (o[key] !== undefined && typeof o[key] !== "string") ctx.fail(`${path}.${key}`, "必须是字符串或省略");
 }
 
+const SCHEME_RE = /^[A-Za-z][A-Za-z0-9+.-]*:/;
+const SAFE_SCHEME_RE = /^(https?:\/\/|mailto:)/i;
+
+/** 链接只允许 http、https、mailto；不写协议（github.com/xx）也可以，排版时会补 https:// */
+export function isSafeUrl(v: string): boolean {
+  const s = v.trim();
+  return s === "" || SAFE_SCHEME_RE.test(s) || !SCHEME_RE.test(s);
+}
+
+function urlField(ctx: Ctx, o: Record<string, unknown>, key: string, path: string): void {
+  const v = o[key];
+  if (typeof v === "string" && !isSafeUrl(v)) ctx.fail(`${path}.${key}`, "链接只支持 http、https 或 mailto 开头");
+}
+
 function reqDate(ctx: Ctx, o: Record<string, unknown>, key: string, path: string, optional: boolean): void {
   const v = o[key];
   if (v === undefined && optional) return;
@@ -118,6 +132,7 @@ function checkModuleData(ctx: Ctx, type: ModuleType, data: Record<string, unknow
       for (const k of ["photoDataUrl", "gender", "birthday", "phone", "email", "location", "website", "github", "blog"]) {
         optString(ctx, data, k, p);
       }
+      for (const k of ["website", "github", "blog"]) urlField(ctx, data, k, p);
       if (typeof data.photoDataUrl === "string" && data.photoDataUrl !== "" && !data.photoDataUrl.startsWith("data:image/")) {
         ctx.fail(`${p}.photoDataUrl`, "照片只支持本地 data URL（data:image/...）");
       }
@@ -127,7 +142,7 @@ function checkModuleData(ctx: Ctx, type: ModuleType, data: Record<string, unknow
           data.customLinks.forEach((l, i) => {
             if (!isObj(l) || typeof l.label !== "string" || typeof l.url !== "string") {
               ctx.fail(`${p}.customLinks[${i}]`, "需要 { label, url } 两个字符串字段");
-            }
+            } else urlField(ctx, l, "url", `${p}.customLinks[${i}]`);
           });
       }
       return;
@@ -153,6 +168,7 @@ function checkModuleData(ctx: Ctx, type: ModuleType, data: Record<string, unknow
       items(ctx, data, p, (it, ip) => {
         reqString(ctx, it, "name", ip);
         for (const k of ["role", "url", "summary"]) optString(ctx, it, k, ip);
+        urlField(ctx, it, "url", ip);
         reqDate(ctx, it, "start", ip, true);
         reqDate(ctx, it, "end", ip, true);
         stringArray(ctx, it.techStack, `${ip}.techStack`, true);
@@ -184,6 +200,7 @@ function checkModuleData(ctx: Ctx, type: ModuleType, data: Record<string, unknow
       items(ctx, data, p, (it, ip) => {
         reqString(ctx, it, "title", ip);
         for (const k of ["venue", "authors", "url"]) optString(ctx, it, k, ip);
+        urlField(ctx, it, "url", ip);
         reqDate(ctx, it, "date", ip, true);
       });
       return;

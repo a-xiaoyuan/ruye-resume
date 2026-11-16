@@ -6,6 +6,7 @@ import {
   createEmptyDocument,
   exportBaseName,
   fromMarkdown,
+  isSafeUrl,
   normalizeDate,
   renderableModules,
   toMarkdown,
@@ -165,4 +166,38 @@ pageMode: fit-a4
   assert.deepEqual(it.techStack, ["Java", "Spring Boot", "Redis"]);
   assert.equal(it.bullets.length, 2);
   assert.equal(it.summary, "电商订单服务");
+});
+
+test("链接只接受 http、https、mailto；不写协议也可以", () => {
+  for (const ok of ["", "https://a.com", "http://a.com", "mailto:a@b.com", "github.com/x", "HTTPS://A.COM"]) assert.ok(isSafeUrl(ok), ok);
+  for (const bad of ["javascript:alert(1)", " JavaScript:alert(1)", "data:text/html,<b>", "vbscript:x", "file:///etc/passwd"]) assert.ok(!isSafeUrl(bad), bad);
+  const doc = load("short");
+  if (doc.modules[0].type === "basic_info") {
+    doc.modules[0].data.github = "javascript:alert(1)";
+    doc.modules[0].data.customLinks = [{ label: "x", url: "data:text/html,1" }];
+  }
+  const r = validateDocument(doc);
+  assert.equal(r.ok, false);
+  if (!r.ok) assert.deepEqual(r.issues.map((i) => i.path), ["$.modules[0].data.github", "$.modules[0].data.customLinks[0].url"]);
+});
+
+test("Markdown 往返保留照片；远程图片与放错位置的图片给出提示", () => {
+  const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==";
+  const doc = load("short");
+  if (doc.modules[0].type === "basic_info") doc.modules[0].data.photoDataUrl = png;
+  const md = toMarkdown(doc);
+  assert.ok(md.includes(`![照片](${png})`));
+  const back = fromMarkdown(md);
+  assert.deepEqual(back.warnings, []);
+  assert.ok(validateDocument(back.doc).ok);
+  assert.deepEqual(back.doc.modules[0].data, doc.modules[0].data);
+
+  const remote = fromMarkdown("# 林知夏\n![照片](https://example.com/me.jpg)\n- 电话：1\n\n## 项目经历\n### 某项目\n![图](data:image/png;base64,AAAA)\n- 做了一件事\n");
+  assert.equal(remote.warnings.length, 2);
+  assert.match(remote.warnings[0], /不会下载远程图片/);
+  assert.match(remote.warnings[1], /其他位置的图片已忽略/);
+  const info = remote.doc.modules[0];
+  assert.ok(info.type === "basic_info" && info.data.photoDataUrl === undefined && info.data.phone === "1");
+  const proj = remote.doc.modules.find((m) => m.type === "project");
+  assert.ok(proj && proj.type === "project" && proj.data.items[0].bullets.length === 1);
 });

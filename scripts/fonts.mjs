@@ -1,17 +1,20 @@
 #!/usr/bin/env node
-// pnpm fonts：下载思源（Noto CJK SC）字体并生成子集。
+// pnpm fonts：下载思源（Noto CJK SC）字体并生成子集。详见 docs/fonts.md。
+//
+//   pnpm fonts            子集（默认）：ASCII + 常用符号 + GB2312 全部 6763 字，3 个文件共约 5.6MB
+//   pnpm fonts -- --full  完整字体：不缺字，但 3 个文件共约 27.6MB，网页首次打开更慢
 //
 // 1. 下载 Noto Sans SC Regular/Bold、Noto Serif SC Bold（OFL-1.1）到 fonts-src/（不进 git）
 //    已有本地字体时：RUYE_FONTS_DIR=/path/to/dir pnpm fonts，目录里放同名 .otf 即可
-// 2. 若装了 fonttools（pip install fonttools），用 pyftsubset 裁成「ASCII + 常用符号 + GB2312 全部 6763 字」
-//    没装则直接使用完整字体（体积大，但不缺字），并给出提示
+// 2. 子集需要 fonttools（pip install fonttools）。依次尝试 pyftsubset、python -m fontTools.subset、
+//    py -m fontTools.subset；都没有时退回完整字体并提示
 // 3. 输出到 packages/templates/fonts/（Node 测试用）和 apps/web/public/fonts/（网页用），
 //    同时写出 charset.txt（缺字检查用；完整字体时为空）
 //
 // 网络受限时：Node 22.21+ 可设置 NODE_USE_ENV_PROXY=1 让 fetch 走 HTTPS_PROXY。
 
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -71,14 +74,26 @@ function buildCharset() {
   return [...chars].join("");
 }
 
-function hasPyftsubset() {
-  try {
-    execFileSync("pyftsubset", ["--help"], { stdio: "ignore" });
-    return true;
-  } catch {
-    return false;
+/** 找一个可用的 fonttools 子集命令，返回 [可执行文件, 前置参数]；找不到返回 null */
+function findSubsetCommand() {
+  const candidates = [
+    ["pyftsubset", []],
+    ["python3", ["-m", "fontTools.subset"]],
+    ["python", ["-m", "fontTools.subset"]],
+    ["py", ["-m", "fontTools.subset"]],
+  ];
+  for (const [cmd, pre] of candidates) {
+    try {
+      execFileSync(cmd, [...pre, "--help"], { stdio: "ignore" });
+      return [cmd, pre];
+    } catch {
+      // 试下一个
+    }
   }
+  return null;
 }
+
+const mb = (bytes) => `${(bytes / 1048576).toFixed(2)} MB`;
 
 async function main() {
   mkdirSync(srcDir, { recursive: true });
@@ -109,7 +124,9 @@ async function main() {
 
   console.log("2/3 生成子集");
   const charset = buildCharset();
-  const subset = hasPyftsubset();
+  const wantFull = process.argv.includes("--full");
+  const subsetCmd = wantFull ? null : findSubsetCommand();
+  const subset = subsetCmd !== null;
   const workDir = join(srcDir, "subset");
   mkdirSync(workDir, { recursive: true });
   const textFile = join(workDir, "charset.txt");
@@ -117,14 +134,16 @@ async function main() {
   for (const f of FONTS) {
     const out = join(workDir, f.file);
     if (subset) {
-      execFileSync("pyftsubset", [join(srcDir, f.file), `--text-file=${textFile}`, `--output-file=${out}`, "--layout-features=*", "--no-hinting", "--name-IDs=*", "--name-legacy"], { stdio: "inherit" });
+      execFileSync(subsetCmd[0], [...subsetCmd[1], join(srcDir, f.file), `--text-file=${textFile}`, `--output-file=${out}`, "--layout-features=*", "--no-hinting", "--name-IDs=*", "--name-legacy"], { stdio: "inherit" });
       console.log(`  ✓ 子集 ${f.file}`);
     } else {
       copyFileSync(join(srcDir, f.file), out);
     }
   }
-  if (!subset) {
-    console.warn("  ! 没找到 pyftsubset，直接使用完整字体（不缺字，但网页首屏下载更大）。安装：pip install fonttools");
+  if (wantFull) {
+    console.log("  · 按 --full 使用完整字体");
+  } else if (!subset) {
+    console.warn("  ! 没找到 fonttools，退回完整字体（不缺字，但网页首次打开要多下载约 22MB）。\n    安装后重跑即可生成子集：pip install fonttools && pnpm fonts");
   }
 
   console.log("3/3 输出");
@@ -136,7 +155,9 @@ async function main() {
     if (existsSync(licenseDest)) copyFileSync(licenseDest, join(dir, "OFL.txt"));
     console.log(`  ✓ ${dir}`);
   }
-  console.log(`完成。子集字符数：${subset ? Array.from(charset).length : "（完整字体）"}`);
+  const total = FONTS.reduce((n, f) => n + statSync(join(workDir, f.file)).size, 0);
+  for (const f of FONTS) console.log(`  ${f.file.padEnd(24)} ${mb(statSync(join(workDir, f.file)).size)}`);
+  console.log(`完成：${subset ? `子集（${Array.from(charset).length} 个字符）` : "完整字体"}，3 个字体文件共 ${mb(total)}。`);
 }
 
 main().catch((e) => {

@@ -35,15 +35,32 @@ export const SPLIT_COMPACT_TOKENS = tokens(
 
 const encoder = new TextEncoder();
 
-/** data:image/png;base64,... → { ext, bytes } */
+// 文件头魔数：只接受内容确实是 PNG / JPEG / GIF / WebP 的图片
+const MAGIC: Record<string, (b: Uint8Array) => boolean> = {
+  png: (b) => b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47,
+  jpg: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  gif: (b) => b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46,
+  webp: (b) => b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50,
+};
+
+/**
+ * data:image/png;base64,... → { ext, bytes }。
+ * base64 损坏、或内容与声明的格式不符时返回 null：照片会被跳过，而不是让整份简历编译失败。
+ * （SVG 照片不接受：Typst 会解析其中的外部引用，没必要冒这个险。）
+ */
 export function decodeDataUrl(url: string): { ext: string; bytes: Uint8Array } | null {
-  const m = url.match(/^data:image\/(png|jpe?g|gif|svg\+xml|webp);base64,(.*)$/);
+  const m = url.match(/^data:image\/(png|jpe?g|gif|webp);base64,([A-Za-z0-9+/=\s]*)$/);
   if (!m) return null;
-  const ext = m[1] === "jpeg" ? "jpg" : m[1] === "svg+xml" ? "svg" : m[1];
-  const bin = atob(m[2]);
+  const ext = m[1] === "jpeg" ? "jpg" : m[1];
+  let bin: string;
+  try {
+    bin = atob(m[2].replace(/\s+/g, ""));
+  } catch {
+    return null;
+  }
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return { ext, bytes };
+  return bytes.length >= 12 && MAGIC[ext](bytes) ? { ext, bytes } : null;
 }
 
 /** 把文档、token、页高组装成 Typst 虚拟文件。所有数据都走 JSON，不拼接 Typst 源码 */

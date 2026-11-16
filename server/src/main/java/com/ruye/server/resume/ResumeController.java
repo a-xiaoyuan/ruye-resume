@@ -44,6 +44,17 @@ public class ResumeController {
         return service.put(uid(jwt), id, body);
     }
 
+    /** 历史版本（含当前版本），新的在前。回收站里的简历也能查，用来恢复 */
+    @GetMapping("/{id}/revisions")
+    public List<ResumeDtos.RevisionSummary> revisions(@AuthenticationPrincipal Jwt jwt, @PathVariable String id) {
+        return service.revisions(uid(jwt), id);
+    }
+
+    @GetMapping("/{id}/revisions/{version}")
+    public ResumeDtos.Detail revision(@AuthenticationPrincipal Jwt jwt, @PathVariable String id, @PathVariable long version) {
+        return service.revision(uid(jwt), id, version);
+    }
+
     @DeleteMapping("/{id}")
     public ResumeDtos.WriteResult delete(@AuthenticationPrincipal Jwt jwt, @PathVariable String id, @RequestParam(required = false) Long baseVersion) {
         return service.delete(uid(jwt), id, baseVersion);

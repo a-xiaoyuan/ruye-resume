@@ -1,6 +1,8 @@
 // 右栏：A4 预览。SVG 来自和导出 PDF 同一个排版器、同一份输入
 import { A4_HEIGHT_MM, describeFit } from "../../../../packages/engine/src/index.ts";
 
+import { Icon } from "./icons.tsx";
+
 export type { PreviewData } from "../layout-service.ts";
 import type { PreviewData } from "../layout-service.ts";
 
@@ -10,9 +12,10 @@ interface Props {
   busy: boolean;
   zoom: number;
   onZoom: (z: number) => void;
+  onCollapse?: () => void;
 }
 
-export function Preview({ data, error, busy, zoom, onZoom }: Props) {
+export function Preview({ data, error, busy, zoom, onZoom, onCollapse }: Props) {
   const r = data?.result;
   const fit = r ? describeFit(r) : null;
 
@@ -40,6 +43,11 @@ export function Preview({ data, error, busy, zoom, onZoom }: Props) {
             +
           </button>
         </div>
+        {onCollapse && (
+          <button type="button" className="collapse-btn" onClick={onCollapse} aria-label="收起预览" title="收起预览，把地方让给编辑区">
+            <Icon name="panelRight" size={16} />
+          </button>
+        )}
       </div>
 
       {error ? (
@@ -66,12 +74,6 @@ export function Preview({ data, error, busy, zoom, onZoom }: Props) {
           <div className="board-wrap">
             <div className="board" style={{ aspectRatio: `210 / ${data.boardMm}`, width: `${zoom * 100}%` }}>
               {/* 四角裁切标记：提醒这是一张真实尺寸的纸，导出的 PDF 与它完全一致 */}
-{/* 稿纸皮肤：把排版结果做成一方印章盖在纸角上（其他皮肤里隐藏） */}
-              {fit && (fit.level === "error" || fit.short.startsWith("已装进")) && (
-                <span className={`fit-sticker ${fit.level}`} aria-hidden="true">
-                  {fit.level === "error" ? "超页" : "一页"}
-                </span>
-              )}
               <span className="crop tl" aria-hidden="true" />
               <span className="crop tr" aria-hidden="true" />
               <span className="crop bl" aria-hidden="true" />

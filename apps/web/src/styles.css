@@ -507,9 +507,8 @@ button.primary.danger-fill { background: var(--err); border-color: var(--err); }
    界面皮肤。结构相同，只换视觉系统：
    paper  纸感（默认，上面那套）
    terminal 终端：深色、等宽、文件树、vim 状态栏，纸在深色上浮起
-   manuscript 稿纸：绿格稿纸、宋体标题写进方格、写作建议是朱批、排版结果是一方印章
    ============================================================ */
-.win-dots, .module-file, .module-path, .statusbar, .fit-sticker { display: none; }
+.win-dots, .module-file, .module-path, .statusbar { display: none; }
 
 /* ---------------- 终端 ---------------- */
 .app[data-skin="terminal"] {
@@ -611,144 +610,6 @@ button.primary.danger-fill { background: var(--err); border-color: var(--err); }
 .app[data-skin="terminal"] .dialog-backdrop { background: rgba(0, 0, 0, 0.55); }
 .app[data-skin="terminal"] .dialog, .app[data-skin="terminal"] .login-dialog .field input { background: #202023; color: var(--ink); }
 
-/* ---------------- 稿纸 ----------------
-   中文写作的老物件：绿格稿纸、朱笔批注、落款盖章。
-   墨色写字，稿纸绿只画格子和线，朱红只给批注与印章——三种颜色各管一件事。 */
-.app[data-skin="manuscript"] {
-  --desk: #dbe1da;
-  --paper: #fcfcf9;
-  --soft: #f2f4f0;
-  --ink: #1d201c;
-  --muted: #565c55;
-  --faint: #8b9289;
-  --line: #d5dcd3;
-  --line-strong: #b4beb1;
-  --grid: #93b8a0;
-  --grid-soft: #c9dccf;
-  --brand: #2f5d46;
-  --brand-strong: #224634;
-  --brand-soft: #e3ece5;
-  --brand-softer: #eef3ef;
-  --zhu: #c8372d;
-  --proof: #c8372d;
-  --warn: #9a3a2f;
-  --warn-dot: #c8372d;
-  --warn-bg: transparent;
-  --radius: 4px;
-  --radius-sm: 3px;
-  --shadow-pop: 0 1px 0 var(--line-strong), 0 14px 30px rgba(29, 32, 28, 0.12);
-  --shadow-paper: 0 1px 2px rgba(29, 32, 28, 0.1), 0 14px 34px -12px rgba(29, 32, 28, 0.28);
-  background: var(--desk);
-}
-.app[data-skin="manuscript"] ::selection { background: var(--grid-soft); }
-.app[data-skin="manuscript"] button.primary { background: var(--ink); border-color: var(--ink); }
-.app[data-skin="manuscript"] button.primary:hover:not(:disabled) { background: #000; }
-
-/* 顶栏：下沿两道细线，像稿纸的天头 */
-.app[data-skin="manuscript"] .topbar { background: var(--paper); border-bottom: 0; box-shadow: 0 1px 0 var(--grid), 0 4px 0 var(--paper), 0 5px 0 var(--grid); z-index: 21; }
-.app[data-skin="manuscript"] .brand-name { letter-spacing: 0.18em; }
-
-/* 大纲：书的目录，名称和数字之间用点线连起来 */
-.app[data-skin="manuscript"] .sidebar { background: var(--soft); border-right-color: var(--line); padding-top: 22px; }
-.app[data-skin="manuscript"] .panel-caption { font-family: var(--font-title); font-size: 13px; letter-spacing: 0.3em; color: var(--ink); }
-.app[data-skin="manuscript"] .panel-caption span { font-family: var(--font-ui); letter-spacing: 0; }
-.app[data-skin="manuscript"] .module-btn { gap: 0; padding-right: 8px; }
-.app[data-skin="manuscript"] .module-name { flex: 1; display: flex; align-items: baseline; color: var(--ink); }
-.app[data-skin="manuscript"] .module-name::after { content: ""; flex: 1; min-width: 12px; margin: 0 6px; border-bottom: 1px dotted var(--line-strong); transform: translateY(-4px); }
-.app[data-skin="manuscript"] .module-sub { margin-left: 0; max-width: 64px; }
-.app[data-skin="manuscript"] .module-nav li { border-radius: 0; }
-.app[data-skin="manuscript"] .module-nav li:hover { background: transparent; }
-.app[data-skin="manuscript"] .module-nav li.active { background: transparent; box-shadow: none; }
-.app[data-skin="manuscript"] .module-nav li.active .module-name { font-weight: 700; }
-.app[data-skin="manuscript"] .module-nav li.active .module-name::before { content: ""; position: absolute; left: 0; top: 50%; width: 5px; height: 5px; margin-top: -3px; background: var(--zhu); border-radius: 50%; }
-.app[data-skin="manuscript"] .module-nav li:hover .module-name::after,
-.app[data-skin="manuscript"] .module-nav li:focus-within .module-name::after { border-bottom-color: transparent; }
-.app[data-skin="manuscript"] .add-chip:hover:not(:disabled) { background: none; color: var(--brand); }
-
-/* 中栏：一页稿纸，左右各一道双线做边框 */
-.app[data-skin="manuscript"] .editor { background: var(--desk); }
-.app[data-skin="manuscript"] .doc-editor {
-  max-width: 700px; margin: 22px auto 0; padding: 4px 44px 40vh; background: var(--paper);
-  box-shadow: inset 3px 0 0 var(--paper), inset 4px 0 0 var(--grid), inset -3px 0 0 var(--paper), inset -4px 0 0 var(--grid), 0 0 0 1px var(--grid);
-}
-.app[data-skin="manuscript"] .module-editor + .module-editor { border-top: 1px solid var(--grid-soft); }
-
-/* 模块标题写进方格：字宽 20px + 字距 8px = 一格 28px */
-.app[data-skin="manuscript"] .editor-head h2 {
-  display: inline-block; font-size: 20px; line-height: 28px; letter-spacing: 8px; padding: 0 0 0 4px;
-  border-top: 1px solid var(--grid); border-bottom: 1px solid var(--grid);
-  box-shadow: inset 1px 0 0 var(--grid);
-  background-image: linear-gradient(to right, transparent 27px, var(--grid) 27px);
-  background-size: 28px 100%;
-  clip-path: inset(0 4px 0 0);
-}
-.app[data-skin="manuscript"] .editor-sub { margin-top: 10px; }
-.app[data-skin="manuscript"] .badge { background: none; border: 1px solid var(--line-strong); border-radius: 2px; }
-
-/* 输入：写在线上。平时只有一条底线，聚焦时才是完整的框 */
-.app[data-skin="manuscript"] .field-block input,
-.app[data-skin="manuscript"] .field-block textarea,
-.app[data-skin="manuscript"] .skill-name,
-.app[data-skin="manuscript"] .tag-input {
-  border: 0; border-bottom: 1px solid var(--line-strong); border-radius: 0; background: transparent; padding-left: 2px; padding-right: 2px;
-}
-.app[data-skin="manuscript"] .field-block input:hover,
-.app[data-skin="manuscript"] .field-block textarea:hover { border-bottom-color: var(--grid); }
-.app[data-skin="manuscript"] .field-block input:focus,
-.app[data-skin="manuscript"] .field-block textarea:focus,
-.app[data-skin="manuscript"] .skill-name:focus,
-.app[data-skin="manuscript"] .tag-input:focus-within { box-shadow: 0 1px 0 var(--brand); border-bottom-color: var(--brand); background: var(--brand-softer); }
-.app[data-skin="manuscript"] .tag { border-radius: 2px; background: var(--soft); }
-.app[data-skin="manuscript"] .bullet-mark { background: var(--ink); opacity: 0.55; border-radius: 0; width: 4px; height: 4px; }
-.app[data-skin="manuscript"] .bullets textarea { border: 0 !important; border-bottom: 1px dashed transparent !important; border-radius: 0; }
-.app[data-skin="manuscript"] .bullets li:hover textarea { border-bottom-color: var(--line-strong) !important; }
-.app[data-skin="manuscript"] .bullets textarea:focus { border-bottom: 1px solid var(--brand) !important; background: var(--brand-softer) !important; box-shadow: none; }
-.app[data-skin="manuscript"] .item-list, .app[data-skin="manuscript"] .item-card { border-color: var(--grid-soft) !important; }
-.app[data-skin="manuscript"] .item-toggle { font-family: var(--font-title); font-size: 15px; }
-.app[data-skin="manuscript"] .item-toggle:hover .item-title { color: var(--ink); text-decoration: underline; text-decoration-color: var(--grid); text-underline-offset: 4px; }
-.app[data-skin="manuscript"] .add-btn { color: var(--brand); }
-.app[data-skin="manuscript"] .guide summary { color: var(--brand); }
-.app[data-skin="manuscript"] .guide ul { background: transparent; border-left: 1px solid var(--grid); border-radius: 0; padding-left: 26px; }
-
-/* 写作建议 = 朱批：红字，前面一个「批」 */
-.app[data-skin="manuscript"] .writing-tips .tip,
-.app[data-skin="manuscript"] .item-tips li { color: var(--zhu); font-family: var(--font-title); font-size: 13px; }
-.app[data-skin="manuscript"] .writing-tips .tip i { display: none; }
-.app[data-skin="manuscript"] .writing-tips .tip::before,
-.app[data-skin="manuscript"] .item-tips li::before {
-  content: "批"; flex-shrink: 0; display: inline-grid; place-items: center; width: 17px; height: 17px;
-  border: 1px solid var(--zhu); border-radius: 2px; color: var(--zhu); background: none; font-size: 11px; line-height: 1;
-}
-.app[data-skin="manuscript"] .item-tips { background: none; padding: 4px 0 8px 26px; margin-left: 24px; border-radius: 0; }
-.app[data-skin="manuscript"] .item-tips li::before { position: absolute; left: -24px; top: 2px; width: 17px; height: 17px; }
-.app[data-skin="manuscript"] .writing-tips .link-btn { color: var(--zhu); font-family: var(--font-ui); }
-.app[data-skin="manuscript"] .item-tip-count, .app[data-skin="manuscript"] .item-tip-count.warn { color: var(--zhu); }
-.app[data-skin="manuscript"] .item-tip-count::before { border-radius: 0; background: var(--zhu); }
-
-/* 右栏：桌上一张纸。排版结果是一方印章，盖在纸的右上角 */
-.app[data-skin="manuscript"] .preview { background: var(--desk); }
-.app[data-skin="manuscript"] .preview-toolbar { background: rgba(219, 225, 218, 0.92); }
-.app[data-skin="manuscript"] .fit-pill.ok i { background: var(--brand); }
-.app[data-skin="manuscript"] .crop::before, .app[data-skin="manuscript"] .crop::after { background: var(--grid); }
-.app[data-skin="manuscript"] .fit-sticker {
-  display: grid; place-items: center; position: absolute; top: 22px; right: -20px; z-index: 2;
-  width: 44px; height: 44px; padding: 3px; border-radius: 3px;
-  background: var(--zhu); color: #fdf3ef; outline: 1.5px solid var(--zhu); outline-offset: 2px;
-  font-family: var(--font-title); font-weight: 700; font-size: 15px; line-height: 1; letter-spacing: 0.06em;
-  writing-mode: vertical-rl; transform: rotate(-4deg); mix-blend-mode: multiply; opacity: 0.92;
-  pointer-events: none;
-}
-.app[data-skin="manuscript"] .fit-sticker.error { background: var(--paper); color: var(--zhu); border: 2px solid var(--zhu); outline: 0; }
-
-/* 浮层与对话框：方角、细线 */
-.app[data-skin="manuscript"] .menu-list, .app[data-skin="manuscript"] .appearance-pop,
-.app[data-skin="manuscript"] .doc-panel, .app[data-skin="manuscript"] .dialog { border-radius: 4px; border: 1px solid var(--line-strong); }
-.app[data-skin="manuscript"] .dialog h2 { letter-spacing: 0.12em; }
-.app[data-skin="manuscript"] .tpl-thumb { border-radius: 2px; }
-.app[data-skin="manuscript"] .toast { background: var(--paper); color: var(--ink); border: 1px solid var(--line-strong); }
-.app[data-skin="manuscript"] .toast.error { color: var(--zhu); border-color: var(--zhu); }
-.app[data-skin="manuscript"] .toast-actions button { background: var(--soft); border: 1px solid var(--line-strong); }
-.app[data-skin="terminal"] .module-sub { display: none; }
 /* 深色底上占位文字必须明显比真实内容暗，否则看起来像已经填了 */
 .app[data-skin="terminal"] ::placeholder { color: #55554f; }
 
@@ -756,7 +617,6 @@ button.primary.danger-fill { background: var(--err); border-color: var(--err); }
    布局也跟着皮肤变：
    纸感   大纲 | 整篇稿子 | 预览       （连着往下写）
    终端   文件树 | 标签页 + 单个文件 | 预览 + 状态栏（像 IDE）
-   稿纸   目录 | 桌上的那张纸（主角）| 右侧抽屉里改一个模块（像排版软件）
    ============================================================ */
 .file-tabs { display: none; }
 .module-pager { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0 28px; border-top: 1px solid var(--line); }
@@ -783,27 +643,155 @@ button.primary.danger-fill { background: var(--err); border-color: var(--err); }
 .app[data-skin="terminal"] .module-pager button:hover:not(:disabled) { background: #232327; }
 .app[data-skin="terminal"] .module-pager button span::before { content: "// "; }
 
-/* 稿纸：纸在正中，改字的抽屉在右边 */
-.app[data-skin="manuscript"] .panes { grid-template-columns: 188px minmax(420px, 1fr) minmax(400px, 460px); grid-template-areas: "nav paper edit"; }
-.app[data-skin="manuscript"] .sidebar { grid-area: nav; }
-.app[data-skin="manuscript"] .preview { grid-area: paper; padding: 0 40px 0; }
-.app[data-skin="manuscript"] .editor { grid-area: edit; border-right: 0; border-left: 1px solid var(--line-strong); background: var(--paper); }
-.app[data-skin="manuscript"] .doc-editor { max-width: none; margin: 0; padding: 0 30px 60px; background: none; box-shadow: none; }
-.app[data-skin="manuscript"] .module-editor { padding-top: 26px; }
-.app[data-skin="manuscript"] .form-grid { grid-template-columns: 1fr; gap: 12px; }
-.app[data-skin="manuscript"] .item-card .form-grid { padding-left: 18px; }
-.app[data-skin="manuscript"] .item-card .field-block.wide, .app[data-skin="manuscript"] .photo-field { grid-column: auto; }
-.app[data-skin="manuscript"] .module-pager { border-top-color: var(--grid-soft); }
-.app[data-skin="manuscript"] .module-pager button { font-family: var(--font-title); }
-/* 预览工具条变成纸下方浮着的一枚小条 */
-.app[data-skin="manuscript"] .preview-inner { display: flex; flex-direction: column; min-height: 100%; max-width: 820px; }
-.app[data-skin="manuscript"] .preview-toolbar {
-  order: 2; position: sticky; top: auto; bottom: 18px; align-self: center; margin: 8px 0 18px; padding: 6px 6px 6px 16px;
-  background: var(--paper); border: 1px solid var(--line-strong); border-radius: 999px; box-shadow: 0 8px 24px rgba(29, 32, 28, 0.14);
+
+/* ---------------- 写起来更顺手 ---------------- */
+/* 收起的条目露出第一条要点 */
+.item-excerpt { order: 3; display: block; font-size: 12.5px; font-weight: 400; line-height: 1.6; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 要点列表底部：添加按钮 + 快捷键提示（悬停或正在写这一段时才显示，平时不打扰） */
+.bullets-foot { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.key-hint { font-size: 11.5px; color: var(--faint); opacity: 0; transition: opacity 0.15s; }
+.field-block:hover .key-hint, .field-block:focus-within .key-hint { opacity: 1; }
+kbd { display: inline-block; padding: 0 5px; margin: 0 1px; font-family: inherit; font-size: 11px; line-height: 17px; color: var(--muted); background: var(--soft); border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 4px; }
+
+/* 收起预览：右边留一条细栏，点一下展开；细栏上仍然显示一页装没装下 */
+.collapse-btn { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; background: none; color: var(--muted); }
+.collapse-btn:hover:not(:disabled) { background: rgba(22, 29, 39, 0.06); color: var(--ink); }
+.app.preview-collapsed .panes { grid-template-columns: var(--outline-w) minmax(440px, 1fr) 46px; }
+.app.preview-collapsed .doc-editor { max-width: 760px; }
+.preview-rail {
+  display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 16px 0;
+  border: 0; border-radius: 0; background: var(--desk); color: var(--muted); font-size: 12.5px;
 }
-.app[data-skin="manuscript"] .preview-toolbar .zoom { margin-left: 18px; border-radius: 999px; }
-.app[data-skin="manuscript"] .board-wrap { padding-top: 36px; }
-.app[data-skin="manuscript"] .sidebar .sort-btn { padding-left: 12px; }
-@media (max-width: 1180px) {
-  .app[data-skin="manuscript"] .panes { grid-template-columns: 188px 1fr; grid-template-areas: "nav edit" "paper paper"; }
+.preview-rail span, .preview-rail em { writing-mode: vertical-rl; letter-spacing: 0.1em; }
+.preview-rail em { font-style: normal; font-size: 11.5px; color: var(--faint); }
+.preview-rail em.error { color: var(--proof); font-weight: 600; }
+.preview-rail:hover:not(:disabled) { background: #dfe3e8; color: var(--ink); }
+.app[data-skin="terminal"] .preview-rail { background: #131316; }
+.app[data-skin="terminal"] .preview-rail:hover:not(:disabled) { background: #1b1b1e; }
+.app[data-skin="terminal"] .collapse-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.06); }
+.app[data-skin="terminal"] kbd { background: #26262a; border-color: #3a3a40; }
+
+/* 外观弹层底部：编辑器界面 */
+.skin-row { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.skin-row .panel-caption { padding: 0; margin: 0 0 9px; }
+
+/* ============================================================
+   顶栏（第三版）：左边是「我的简历」与当前标题，右边是撤销重做、历史、外观、账号、导出
+   ============================================================ */
+.topbar { gap: 14px; }
+.brand { width: auto; padding-right: 6px; }
+.library-btn { display: inline-flex; align-items: center; gap: 7px; border-color: transparent; background: none; color: var(--muted); padding: 6px 10px; }
+.library-btn:hover:not(:disabled) { background: var(--soft); color: var(--ink); }
+.library-btn.on { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+.doc-meta { padding-left: 14px; border-left: 1px solid var(--line); }
+.doc-title { min-width: 0; max-width: 360px; border: 0; background: none; padding: 5px 8px; margin-left: -8px; font-size: 14px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.doc-title:hover:not(:disabled) { background: var(--soft); }
+.icon-btn { display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; border-color: transparent; background: none; color: var(--muted); }
+.icon-btn:hover:not(:disabled) { background: var(--soft); color: var(--ink); }
+.icon-btn:disabled { opacity: 0.3; }
+.undo-group { display: inline-flex; gap: 0; margin-right: 2px; padding-right: 6px; border-right: 1px solid var(--line); }
+.app[data-skin="terminal"] .library-btn.on { background: var(--brand-soft); }
+.app[data-skin="terminal"] .icon-btn:hover:not(:disabled),
+.app[data-skin="terminal"] .library-btn:hover:not(:disabled),
+.app[data-skin="terminal"] .doc-title:hover:not(:disabled) { background: rgba(255, 255, 255, 0.06); }
+
+/* ============================================================
+   我的简历
+   ============================================================ */
+.library { flex: 1; min-height: 0; overflow-y: auto; background: var(--desk); }
+.library-inner { max-width: 1120px; margin: 0 auto; padding: 36px 40px 80px; }
+.library-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 22px; }
+.library-head h1 { margin: 0; font-family: var(--font-title); font-size: 28px; letter-spacing: 0.04em; }
+.library-head p { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
+.library-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.library-actions button { padding: 8px 14px; }
+.library-actions .ghost { border-color: transparent; background: none; color: var(--muted); }
+
+.cloud-strip { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; padding: 12px 14px 12px 16px; border-radius: var(--radius); background: var(--paper); box-shadow: 0 0 0 1px var(--line); font-size: 13px; line-height: 1.6; color: var(--muted); }
+.cloud-strip > svg { flex-shrink: 0; color: var(--faint); }
+.cloud-strip.on > svg { color: var(--ok); }
+.cloud-strip span { flex: 1; }
+.cloud-strip em { display: block; font-style: normal; font-size: 12px; color: var(--faint); }
+.cloud-strip button { flex-shrink: 0; }
+
+.doc-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 16px; }
+.doc-card { display: flex; gap: 16px; padding: 14px; border-radius: 12px; background: var(--paper); box-shadow: 0 0 0 1px var(--line); transition: box-shadow 0.15s; }
+.doc-card:hover { box-shadow: 0 0 0 1px var(--line-strong), 0 8px 22px -12px rgba(22, 29, 39, 0.25); }
+.doc-card.current { box-shadow: 0 0 0 2px var(--brand); }
+.doc-card-open { flex-shrink: 0; padding: 0; border: 0; background: none; }
+.doc-card-open:hover:not(:disabled) { background: none; }
+.doc-card-thumb { display: block; width: 92px; aspect-ratio: 210 / 297; overflow: hidden; border-radius: 3px; background: #fff; box-shadow: 0 0 0 1px var(--line), 0 2px 6px rgba(22, 29, 39, 0.08); transition: transform 0.15s; }
+.doc-card-open:hover .doc-card-thumb { transform: translateY(-2px); }
+.doc-card-thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.doc-card-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.doc-card-title { align-self: flex-start; max-width: 100%; border: 0; background: none; padding: 0; font-size: 15px; font-weight: 700; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.doc-card-title:hover:not(:disabled) { background: none; color: var(--brand); }
+.doc-card-meta { margin: 0; font-size: 12.5px; color: var(--muted); }
+.doc-card-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0; font-size: 12px; color: var(--faint); }
+.doc-card-foot i { font-style: normal; font-size: 11.5px; padding: 1px 8px; border-radius: 999px; }
+.tag-current { background: var(--brand-soft); color: var(--brand); }
+.sync-badge.ok { background: var(--ok-bg); color: var(--ok); }
+.sync-badge.pending { background: var(--warn-bg); color: var(--warn); }
+.sync-badge.off { background: var(--soft); color: var(--muted); }
+.doc-card-actions { display: flex; flex-wrap: wrap; gap: 2px; margin-top: auto; padding-top: 6px; }
+.doc-card-actions button { border: 0; background: none; padding: 4px 8px; margin-left: -8px; margin-right: 8px; font-size: 12.5px; color: var(--muted); }
+.doc-card-actions button:hover:not(:disabled) { background: var(--soft); color: var(--ink); }
+.doc-card-actions .danger:hover:not(:disabled) { background: var(--err-bg); color: var(--err); }
+.rename-form { display: flex; gap: 6px; }
+.rename-form input { flex: 1; min-width: 0; padding: 5px 8px; border: 1px solid var(--brand); border-radius: var(--radius-sm); font-size: 14px; outline: none; box-shadow: 0 0 0 3px var(--brand-soft); background: var(--paper); }
+.rename-form button { padding: 4px 10px; }
+
+.library-section { margin-top: 34px; }
+.library-section h2 { margin: 0 0 10px; font-size: 14px; font-weight: 700; }
+.library-hint { margin: 0 0 12px; font-size: 12.5px; color: var(--faint); }
+.fold { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; padding: 0; font-size: 14px; font-weight: 700; }
+.fold:hover:not(:disabled) { background: none; color: var(--brand); }
+.fold[aria-expanded="true"] .chev::before { transform: rotate(45deg); top: 1px; }
+.plain-list { list-style: none; margin: 0; padding: 0; border-radius: var(--radius); background: var(--paper); box-shadow: 0 0 0 1px var(--line); }
+.plain-list li { display: flex; align-items: center; gap: 14px; padding: 10px 14px; }
+.plain-list li + li { border-top: 1px solid var(--line); }
+.pl-title { font-weight: 600; font-size: 13.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-meta { flex: 1; font-size: 12px; color: var(--faint); }
+.sample-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.sample-chips button { display: inline-flex; align-items: baseline; gap: 8px; padding: 8px 14px; border-radius: 999px; background: var(--paper); }
+.sample-chips em { font-style: normal; font-size: 11.5px; color: var(--faint); }
+
+.app[data-skin="terminal"] .doc-card, .app[data-skin="terminal"] .plain-list, .app[data-skin="terminal"] .cloud-strip { background: #1b1b1e; }
+.app[data-skin="terminal"] .doc-card-actions button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.06); }
+.app[data-skin="terminal"] .library-head h1 { font-family: var(--font-mono); }
+
+/* ============================================================
+   历史版本
+   ============================================================ */
+.history-dialog { width: min(620px, calc(100vw - 32px)); max-width: none; max-height: calc(100vh - 80px); display: flex; flex-direction: column; padding: 20px 22px 14px; }
+.history-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.history-head h2 { margin: 0; }
+.history-head p { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+.history-rule, .history-note { margin: 10px 0 0; font-size: 12.5px; line-height: 1.7; color: var(--faint); }
+.history-note { color: var(--muted); }
+.history-empty { margin: 24px 0; text-align: center; font-size: 13px; color: var(--faint); }
+.history-list { list-style: none; margin: 14px -6px 0; padding: 0; overflow-y: auto; }
+.history-list li { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 12px; padding: 10px 6px; border-top: 1px solid var(--line); }
+.history-list li.same { opacity: 0.6; }
+.history-main { display: flex; flex-direction: column; min-width: 0; }
+.history-when { font-weight: 600; font-size: 13.5px; }
+.history-title { font-size: 12px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.history-meta { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.src { font-style: normal; font-size: 11.5px; padding: 1px 7px; border-radius: 999px; background: var(--soft); }
+.src.cloud { background: var(--brand-soft); color: var(--brand); }
+.history-list button { padding: 5px 10px; font-size: 12.5px; }
+.app[data-skin="terminal"] .history-dialog { background: #202023; }
+/* 卡片封面：一张小纸，写着这份简历自己的姓名与求职意向 */
+.doc-cover {
+  display: flex; flex-direction: column; gap: 5px; width: 84px; aspect-ratio: 210 / 297; padding: 11px 9px; overflow: hidden;
+  border-radius: 3px; background: #fff; text-align: left; box-shadow: 0 0 0 1px var(--line), 0 2px 6px rgba(22, 29, 39, 0.08); transition: transform 0.15s;
 }
+.doc-cover b { font-size: 12px; line-height: 1.25; color: #161d27; word-break: break-all; }
+.doc-cover em { font-style: normal; font-size: 9px; line-height: 1.3; color: var(--cover); padding-bottom: 5px; border-bottom: 1.5px solid var(--cover); }
+.doc-cover i { display: block; height: 3px; border-radius: 2px; background: #e6e9ee; }
+.doc-cover i:nth-of-type(2n) { width: 72%; }
+.doc-card-open:hover .doc-cover { transform: translateY(-2px); }
+.doc-card-actions button { margin-right: 4px; }
+.drop-hint { position: fixed; inset: 10px; z-index: 70; display: grid; place-items: center; border: 2px dashed var(--brand); border-radius: 14px; background: rgba(233, 238, 248, 0.86); pointer-events: none; }
+.drop-hint span { padding: 12px 18px; border-radius: 10px; background: var(--paper); box-shadow: var(--shadow-pop); font-size: 14px; font-weight: 600; color: var(--brand); }
+.app[data-skin="terminal"] .drop-hint { background: rgba(19, 19, 22, 0.85); }

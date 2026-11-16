@@ -99,6 +99,16 @@ export interface CloudApi {
   get(id: string): Promise<{ id: string; version: number; updatedAt: number; doc: unknown }>;
   put(id: string, baseVersion: number | null, doc: RuyeDocument): Promise<WriteResult>;
   remove(id: string, baseVersion: number): Promise<WriteResult>;
+  /** 历史版本（含当前版本），新的在前；回收站里的简历也能查 */
+  revisions?(id: string): Promise<RemoteRevision[]>;
+  revision?(id: string, version: number): Promise<{ id: string; version: number; updatedAt: number; doc: unknown }>;
+}
+
+export interface RemoteRevision {
+  version: number;
+  title: string;
+  savedAt: number;
+  current: boolean;
 }
 
 async function request<T>(base: string, path: string, init: RequestInit & { token?: string } = {}): Promise<T> {
@@ -212,6 +222,8 @@ export function createClient(store: SessionStore = localSessionStore, base: stri
     get: (id) => authed(`/api/resumes/${enc(id)}`),
     put: (id, baseVersion, doc) => authed(`/api/resumes/${enc(id)}`, { method: "PUT", body: JSON.stringify({ baseVersion, doc }) }),
     remove: (id, baseVersion) => authed(`/api/resumes/${enc(id)}?baseVersion=${baseVersion}`, { method: "DELETE" }),
+    revisions: (id) => authed(`/api/resumes/${enc(id)}/revisions`),
+    revision: (id, version) => authed(`/api/resumes/${enc(id)}/revisions/${version}`),
   };
 
   return {

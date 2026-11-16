@@ -1,6 +1,9 @@
 package com.ruye.server.resume;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.regex.Pattern;
@@ -22,13 +25,20 @@ public class ResumeService {
 
     private static final Pattern CLIENT_ID = Pattern.compile("^[A-Za-z0-9_-]{1,64}$");
 
+    /** 同一份简历两次留档的最小间隔：自动同步每隔几秒就写一次，不能每次都留 */
+    static final Duration REVISION_GAP = Duration.ofMinutes(10);
+    /** 每份简历最多保留的历史版本数 */
+    static final int MAX_REVISIONS = 50;
+
     private final ResumeRepository resumes;
+    private final ResumeRevisionRepository revisions;
     private final UserAccountRepository users;
     private final ObjectMapper mapper;
     private final RuyeProperties props;
 
-    public ResumeService(ResumeRepository resumes, UserAccountRepository users, ObjectMapper mapper, RuyeProperties props) {
+    public ResumeService(ResumeRepository resumes, ResumeRevisionRepository revisions, UserAccountRepository users, ObjectMapper mapper, RuyeProperties props) {
         this.resumes = resumes;
+        this.revisions = revisions;
         this.users = users;
         this.mapper = mapper;
         this.props = props;
@@ -72,6 +82,7 @@ public class ResumeService {
             // 云端已被其他设备改过（或已删除）：不覆盖，让客户端决定
             throw new ConflictException("云端的这份简历已在其他设备上修改过", ResumeDtos.Summary.of(r));
         }
+        if (r.getId() != null && !r.isDeleted() && !content.equals(r.getContent())) keepRevision(r, false);
         r.write(title, alias, content);
         ResumeDocument saved = resumes.saveAndFlush(r);
         return new ResumeDtos.WriteResult(saved.getClientId(), saved.getVersion(), saved.getUpdatedAt().toEpochMilli());
@@ -86,8 +97,42 @@ public class ResumeService {
         if (baseVersion != null && baseVersion != r.getVersion()) {
             throw new ConflictException("云端的这份简历已在其他设备上修改过，未删除", ResumeDtos.Summary.of(r));
         }
+        keepRevision(r, true);
         r.markDeleted();
         return new ResumeDtos.WriteResult(r.getClientId(), r.getVersion(), r.getUpdatedAt().toEpochMilli());
+    }
+
+    @Transactional(readOnly = true)
+    public List<ResumeDtos.RevisionSummary> revisions(long userId, String clientId) {
+        ResumeDocument r = resumes.findOne(userId, checkId(clientId)).orElseThrow(ResumeService::notFound);
+        List<ResumeDtos.RevisionSummary> out = new ArrayList<>();
+        if (!r.isDeleted()) out.add(new ResumeDtos.RevisionSummary(r.getVersion(), r.getTitle(), r.getUpdatedAt().toEpochMilli(), true));
+        revisions.findAllByDocument(r.getId()).forEach(v -> out.add(ResumeDtos.RevisionSummary.of(v)));
+        return out;
+    }
+
+    @Transactional(readOnly = true)
+    public ResumeDtos.Detail revision(long userId, String clientId, long version) {
+        ResumeDocument r = resumes.findOne(userId, checkId(clientId)).orElseThrow(ResumeService::notFound);
+        if (!r.isDeleted() && r.getVersion() == version) return detail(r);
+        ResumeRevision v = revisions.findOne(r.getId(), version)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "not_found", "没有这个历史版本"));
+        try {
+            return new ResumeDtos.Detail(r.getClientId(), v.getVersion(), v.getSavedAt().toEpochMilli(), mapper.readTree(v.getContent()));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("数据库中的历史版本已损坏：" + v.getId(), e);
+        }
+    }
+
+    /** 覆盖或删除前把当前内容留档。force 为 false 时，距上次留档不足 REVISION_GAP 就跳过；超过上限删掉最旧的 */
+    private void keepRevision(ResumeDocument r, boolean force) {
+        if (!force) {
+            Instant last = revisions.latestSavedAt(r.getId()).orElse(null);
+            if (last != null && last.isAfter(Instant.now().minus(REVISION_GAP))) return;
+        }
+        revisions.save(ResumeRevision.of(r));
+        List<ResumeRevision> all = revisions.findAllByDocument(r.getId());
+        if (all.size() > MAX_REVISIONS) revisions.deleteAll(all.subList(MAX_REVISIONS, all.size()));
     }
 
     private ResumeDtos.Detail detail(ResumeDocument r) {

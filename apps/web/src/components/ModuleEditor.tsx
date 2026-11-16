@@ -116,6 +116,13 @@ export function ModuleEditor({ doc, module: m, onChange, onRemove, onError, onRe
   );
 }
 
+/** 收起时在标题下露出第一条要点，不用展开也知道这段写了什么 */
+function excerpt(it: ListItem): string {
+  const r = it as unknown as { bullets?: string[]; highlights?: string[]; summary?: string; description?: string };
+  const first = [...(r.bullets ?? []), ...(r.highlights ?? [])].find((b) => b.trim() && !/[：:]\s*$/.test(b.trim()));
+  return (first ?? r.summary ?? r.description ?? "").trim();
+}
+
 /** 写作建议：只显示当前模块的；点一条会展开对应条目 */
 /**
  * 模块级写作建议：不属于某个条目的（缺联系方式、「精通」过多……）直接列出；
@@ -248,6 +255,7 @@ function ItemsEditor({
                 <span className="chev" aria-hidden="true" />
                 <span className="item-head-text">
                   <span className="item-title">{itemTitle(it)}</span>
+                  {!expanded && excerpt(it) && <span className="item-excerpt">{excerpt(it)}</span>}
                   {(when || tips.length > 0) && (
                     <span className="item-meta">
                       {when && <span className="item-when">{when}</span>}
@@ -264,6 +272,22 @@ function ItemsEditor({
                 </button>
                 <button type="button" aria-label="下移条目" disabled={i === items.length - 1} onClick={() => onChange(moveItem(doc, m.id, it.id, 1))}>
                   <Icon name="down" size={14} />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`复制 ${itemTitle(it)}`}
+                  title="复制一份，改成另一段经历"
+                  onClick={() => {
+                    const copy = { ...structuredClone(it), id: newId() } as ListItem;
+                    onChange(replaceModule(doc, m.id, (x) => {
+                      const list = [...((x.data as { items: ListItem[] }).items)];
+                      list.splice(i + 1, 0, copy);
+                      return { ...x, data: { ...x.data, items: list } } as Module;
+                    }));
+                    setOpen(copy.id);
+                  }}
+                >
+                  <Icon name="copy" size={14} />
                 </button>
                 <button type="button" aria-label={`删除 ${itemTitle(it)}`} onClick={() => onRemove(removeItem(doc, m.id, it.id), `「${itemTitle(it)}」`)}>
                   <Icon name="close" size={14} />

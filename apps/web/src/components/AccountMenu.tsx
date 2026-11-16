@@ -28,16 +28,18 @@ interface Options {
   /** 当前打开的简历被云端版本替换了：重新载入 */
   onReplaced: (ids: string[]) => void;
   onNotice: (text: string, level?: "info" | "error") => void;
+  /** 从云端拉下了其他设备上的简历 */
+  onPulled?: (count: number) => void;
 }
 
-export function useCloudSync({ revision, store, onReplaced, onNotice }: Options) {
+export function useCloudSync({ revision, store, onReplaced, onNotice, onPulled }: Options) {
   const enabled = cloudEnabled();
   const [session, setSessionState] = useState<Session | null>(() => (enabled ? loadSession() : null));
   const [status, setStatus] = useState<Status>({ phase: "idle", text: "" });
   const [detached, setDetached] = useState<string[]>([]);
   const running = useRef(false);
-  const latest = useRef({ store, onReplaced, onNotice });
-  latest.current = { store, onReplaced, onNotice };
+  const latest = useRef({ store, onReplaced, onNotice, onPulled });
+  latest.current = { store, onReplaced, onNotice, onPulled };
 
   // 会话存储：写 localStorage 的同时更新界面；刷新失败（被设为 null）时提示重新登录
   const sessionStore = useMemo<SessionStore>(
@@ -86,6 +88,7 @@ export function useCloudSync({ revision, store, onReplaced, onNotice }: Options)
       setStatus({ phase: done.errors.length ? "error" : "ok", text, at: Date.now() });
       if (done.replaced.length) latest.current.onReplaced(done.replaced);
       if (done.conflicts.length || done.detached.length || done.errors.length) latest.current.onNotice(text, done.errors.length ? "error" : "info");
+      else if (done.pulled > done.replaced.length) latest.current.onPulled?.(done.pulled - done.replaced.length);
     } catch (e) {
       if (e instanceof CloudError && e.status === 401) {
         sessionStore.set(null);
@@ -118,6 +121,7 @@ export function useCloudSync({ revision, store, onReplaced, onNotice }: Options)
   return {
     enabled,
     session,
+    api: session ? (client?.api ?? null) : null,
     status,
     detached,
     syncNow: () => void syncNow(),
@@ -145,9 +149,12 @@ export function useCloudSync({ revision, store, onReplaced, onNotice }: Options)
 
 type Cloud = ReturnType<typeof useCloudSync>;
 
-export function AccountMenu({ cloud }: { cloud: Cloud }) {
+export function AccountMenu({ cloud, loginSignal = 0 }: { cloud: Cloud; /** 每次加一就弹出登录框（「我的简历」页里的登录按钮用） */ loginSignal?: number }) {
   const [open, setOpen] = useState(false);
   const [dialog, setDialog] = useState<null | "login" | "delete">(null);
+  useEffect(() => {
+    if (loginSignal > 0 && !cloud.session) setDialog("login");
+  }, [loginSignal]);
   // 打开找回密码链接（…/#reset=令牌）时直接弹出设置新密码
   const [resetToken, setResetToken] = useState<string | null>(() => (cloud.enabled ? readResetToken(window.location.hash) : null));
   const ref = useRef<HTMLDivElement>(null);

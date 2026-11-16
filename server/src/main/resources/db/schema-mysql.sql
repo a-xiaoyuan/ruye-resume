@@ -23,3 +23,17 @@ CREATE TABLE IF NOT EXISTS resume_document (
   KEY idx_resume_owner (owner_id),
   CONSTRAINT fk_resume_owner FOREIGN KEY (owner_id) REFERENCES user_account (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 云端简历的历史版本（覆盖或删除前留档；同一份简历两次留档至少间隔 10 分钟，最多保留 50 个）
+CREATE TABLE IF NOT EXISTS resume_revision (
+  id          BIGINT       NOT NULL AUTO_INCREMENT,
+  owner_id    BIGINT       NOT NULL,
+  document_id BIGINT       NOT NULL,
+  version     BIGINT       NOT NULL,
+  title       VARCHAR(200) NOT NULL,
+  content     LONGTEXT     NOT NULL,
+  saved_at    DATETIME(6)  NOT NULL,
+  PRIMARY KEY (id),
+  KEY idx_revision_document (document_id, version),
+  KEY idx_revision_owner (owner_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

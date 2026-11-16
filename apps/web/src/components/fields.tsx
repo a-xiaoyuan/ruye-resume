@@ -1,6 +1,7 @@
 // 表单基础控件：文本、多行、日期、标签输入、要点列表、照片
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
 import { isValidDate, normalizeDate, PRESENT } from "../../../../packages/schema/src/index.ts";
+import { splitPastedLines } from "../paste.ts";
 
 interface FieldProps {
   label: string;
@@ -22,7 +23,7 @@ export function TextField({ label, value, onChange, placeholder, wide, type = "t
 }
 
 /** 自动增高的多行输入框 */
-function AutoTextarea(props: { value: string; onChange: (v: string) => void; onKeyDown?: (e: KeyboardEvent<HTMLTextAreaElement>) => void; placeholder?: string; id?: string; inputRef?: (el: HTMLTextAreaElement | null) => void; ariaLabel?: string }) {
+function AutoTextarea(props: { value: string; onChange: (v: string) => void; onKeyDown?: (e: KeyboardEvent<HTMLTextAreaElement>) => void; onPaste?: (e: ClipboardEvent<HTMLTextAreaElement>) => void; placeholder?: string; id?: string; inputRef?: (el: HTMLTextAreaElement | null) => void; ariaLabel?: string }) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
   useEffect(() => {
     const el = ref.current;
@@ -43,6 +44,7 @@ function AutoTextarea(props: { value: string; onChange: (v: string) => void; onK
       placeholder={props.placeholder}
       onChange={(e) => props.onChange(e.target.value)}
       onKeyDown={props.onKeyDown}
+      onPaste={props.onPaste}
     />
   );
 }
@@ -95,7 +97,7 @@ export function DateField({ label, value, onChange, allowPresent }: { label: str
   );
 }
 
-/** 标签输入：回车或逗号完成一个；退格删除最后一个 */
+/** 标签输入：回车或逗号完成一个；退格删除最后一个；粘贴「Java、Spring Boot、MySQL」直接拆成多个 */
 export function TagInput({ label, value, onChange, placeholder }: { label: string; value: string[] | undefined; onChange: (v: string[]) => void; placeholder?: string }) {
   const id = useId();
   const tags = value ?? [];
@@ -133,6 +135,12 @@ export function TagInput({ label, value, onChange, placeholder }: { label: strin
             } else if (e.key === "Backspace" && draft === "" && tags.length) {
               onChange(tags.slice(0, -1));
             }
+          }}
+          onPaste={(e) => {
+            const text = e.clipboardData.getData("text/plain");
+            if (!/[,，、;；\n]/.test(text)) return;
+            e.preventDefault();
+            commit(draft + text.replace(/\r?\n/g, "、"));
           }}
           onBlur={() => draft.trim() && commit(draft)}
         />
@@ -173,7 +181,43 @@ export function BulletList({ label, value, onChange, placeholder }: { label: str
                 placeholder={i === 0 ? placeholder : ""}
                 inputRef={(el) => (refs.current[i] = el)}
                 onChange={(v) => set(i, v.replace(/\n/g, ""))}
+                onPaste={(e) => {
+                  // 从旧简历、Word、网页粘过来的多行文字：一行拆成一条，去掉行首的圆点和序号
+                  const text = e.clipboardData.getData("text/plain");
+                  const lines = splitPastedLines(text);
+                  if (lines.length < 2) return;
+                  e.preventDefault();
+                  const el = e.currentTarget;
+                  const before = b.slice(0, el.selectionStart);
+                  const after = b.slice(el.selectionEnd);
+                  lines[0] = before + lines[0];
+                  lines[lines.length - 1] += after;
+                  const next = [...list];
+                  next.splice(i, 1, ...lines);
+                  onChange(next);
+                  setFocus(i + lines.length - 1);
+                }}
                 onKeyDown={(e) => {
+                  const el = e.currentTarget;
+                  if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+                    // Alt+↑/↓：整条上下移动
+                    const j = e.key === "ArrowUp" ? i - 1 : i + 1;
+                    if (j < 0 || j >= list.length) return;
+                    e.preventDefault();
+                    onChange(swap(list, i, j));
+                    setFocus(j);
+                    return;
+                  }
+                  if (e.key === "ArrowUp" && el.selectionStart === 0 && el.selectionEnd === 0 && i > 0) {
+                    e.preventDefault();
+                    setFocus(i - 1);
+                    return;
+                  }
+                  if (e.key === "ArrowDown" && el.selectionStart === b.length && i < list.length - 1) {
+                    e.preventDefault();
+                    setFocus(i + 1);
+                    return;
+                  }
                   if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                     e.preventDefault();
                     const next = [...list];
@@ -207,9 +251,14 @@ export function BulletList({ label, value, onChange, placeholder }: { label: str
           );
         })}
       </ol>
-      <button type="button" className="link-btn add-line" onClick={() => (onChange([...list, ""]), setFocus(list.length))}>
-        ＋ 添加一条
-      </button>
+      <div className="bullets-foot">
+        <button type="button" className="link-btn add-line" onClick={() => (onChange([...list, ""]), setFocus(list.length))}>
+          ＋ 添加一条
+        </button>
+        <span className="key-hint">
+          <kbd>回车</kbd> 新起一条 · <kbd>Alt</kbd>+<kbd>↑↓</kbd> 调顺序 · 多行文字可以直接粘贴
+        </span>
+      </div>
     </div>
   );
 }

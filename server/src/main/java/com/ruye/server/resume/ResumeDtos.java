@@ -24,4 +24,11 @@ public final class ResumeDtos {
     public record PutRequest(@PositiveOrZero Long baseVersion, @NotNull(message = "不能为空") JsonNode doc) {}
 
     public record WriteResult(String id, long version, long updatedAt) {}
+
+    /** 历史版本列表项。current 为 true 的那一项就是云端当前内容 */
+    public record RevisionSummary(long version, String title, long savedAt, boolean current) {
+        static RevisionSummary of(ResumeRevision v) {
+            return new RevisionSummary(v.getVersion(), v.getTitle(), v.getSavedAt().toEpochMilli(), false);
+        }
+    }
 }

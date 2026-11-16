@@ -14,20 +14,24 @@ import {
 import { describeFit, findMissingChars } from "../../../packages/engine/src/index.ts";
 import { createLayoutClient } from "./layout-client.ts";
 import { deleteDocument, download, listDocuments, loadDocument, loadOutcome, newDocumentId, openSession, saveCurrent, saveStatusText, setCurrentId, type SaveMode, putDocument } from "./storage.ts";
-import { DocSwitcher } from "./components/DocSwitcher.tsx";
 import { addModule, duplicateDocument, removeModule, setAlias, syncTitle } from "./doc-ops.ts";
 import { ModuleEditor } from "./components/ModuleEditor.tsx";
 import { Preview, type PreviewData } from "./components/Preview.tsx";
 import { AccountMenu, useCloudSync } from "./components/AccountMenu.tsx";
-import { SAMPLES, SAMPLE_MENU } from "./samples.ts";
+import { SAMPLES } from "./samples.ts";
 import { parseImport } from "./import-file.ts";
 import { Logo, Menu } from "./components/Menu.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
+import { Icon } from "./components/icons.tsx";
 import { AppearanceMenu } from "./components/AppearanceMenu.tsx";
 import { OverflowDialog } from "./components/OverflowDialog.tsx";
 import { StatusBar } from "./components/StatusBar.tsx";
-import { loadSkin, MODULE_FILES, saveSkin, SKINS, type Skin } from "./skin.ts";
+import { loadSkin, MODULE_FILES, saveSkin, type Skin } from "./skin.ts";
 import { templateMeta } from "../../../packages/templates/src/index.ts";
+import { Library } from "./components/Library.tsx";
+import { HistoryDialog } from "./components/HistoryDialog.tsx";
+import { moveToTrash, recordSnapshot } from "./history.ts";
+import { contentHash } from "./sync.ts";
 
 interface Notice {
   text: string;
@@ -36,7 +40,13 @@ interface Notice {
   undo?: RuyeDocument;
   /** 不自动消失：恢复说明和存档损坏必须留在屏幕上 */
   sticky?: boolean;
+  /** 附带的一个操作按钮，例如「去看看」 */
+  action?: { label: string; run: () => void };
 }
+
+/** 撤销记录最多留多少步；连续输入时 800ms 内的修改合成一步 */
+const UNDO_LIMIT = 100;
+const UNDO_MERGE_MS = 800;
 
 export function App() {
   const opened = useMemo(() => openSession(loadOutcome(), structuredClone(SAMPLES.full)), []);
@@ -60,11 +70,31 @@ export function App() {
   const [exporting, setExporting] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(opened.notice ? { text: opened.notice, level: "error", sticky: true } : null);
   const [overflowDialog, setOverflowDialog] = useState(false);
+  // 主界面：编辑器 / 我的简历
+  const [view, setView] = useState<"editor" | "library">("editor");
+  const [historyFor, setHistoryFor] = useState<string | null>(null);
+  const [loginSignal, setLoginSignal] = useState(0);
   const [zoom, setZoom] = useState(1);
   const fileInput = useRef<HTMLInputElement>(null);
   const [skin, setSkinState] = useState<Skin>(loadSkin);
-  // 纸感：整篇连着写；终端和稿纸：一次只摊开一个模块
-  const single = skin !== "paper";
+  // 收起预览：屏幕窄的时候把地方让给编辑区
+  const [previewOpen, setPreviewOpen] = useState(() => {
+    try {
+      return localStorage.getItem("ruye.preview") !== "closed";
+    } catch {
+      return true;
+    }
+  });
+  const togglePreview = (open: boolean) => {
+    setPreviewOpen(open);
+    try {
+      localStorage.setItem("ruye.preview", open ? "open" : "closed");
+    } catch {
+      /* 存不了就只在这次生效 */
+    }
+  };
+  // 浅色：整篇连着写；深色终端：一次打开一个模块
+  const single = skin === "terminal";
   const shownId = doc.modules.some((m) => m.id === activeId) ? activeId : (doc.modules[0]?.id ?? null);
   const shownIndex = doc.modules.findIndex((m) => m.id === shownId);
   const setSkin = (s: Skin) => {
@@ -83,15 +113,60 @@ export function App() {
   }, [doc]);
   const mode = doc.layout.pageMode;
 
-  // 撤销只保存「删除前」的整份文档；删除之后又有新编辑时，撤销会连新编辑一起丢掉，所以此时让撤销失效
-  const update = (next: RuyeDocument) => {
+  // 撤销 / 重做：整份文档的快照栈。只在这一份简历里有效，切换简历时清空
+  const past = useRef<RuyeDocument[]>([]);
+  const future = useRef<RuyeDocument[]>([]);
+  const lastEdit = useRef(0);
+  const [, setUndoTick] = useState(0);
+  const remember = (prev: RuyeDocument, merge: boolean) => {
+    const now = Date.now();
+    if (!merge || now - lastEdit.current > UNDO_MERGE_MS) {
+      past.current = [...past.current.slice(-(UNDO_LIMIT - 1)), prev];
+    }
+    lastEdit.current = now;
+    future.current = [];
+    setUndoTick((x) => x + 1);
+  };
+  const resetUndo = () => {
+    past.current = [];
+    future.current = [];
+    lastEdit.current = 0;
+    setUndoTick((x) => x + 1);
+  };
+  const applyDoc = (next: RuyeDocument) => {
     pristineSample.current = null;
     if (persist) setSavePhase("pending");
-    setNotice((n) => (n?.undo ? null : n));
     setDoc(syncTitle(next));
   };
+  function undo() {
+    const prev = past.current.at(-1);
+    if (!prev) return;
+    past.current = past.current.slice(0, -1);
+    future.current = [...future.current, doc];
+    lastEdit.current = 0;
+    applyDoc(prev);
+    setNotice((n) => (n?.undo ? null : n));
+    setUndoTick((x) => x + 1);
+  }
+  function redo() {
+    const next = future.current.at(-1);
+    if (!next) return;
+    future.current = future.current.slice(0, -1);
+    past.current = [...past.current, doc];
+    lastEdit.current = 0;
+    applyDoc(next);
+    setUndoTick((x) => x + 1);
+  }
+
+  // 删除之后又有新编辑时，删除提示里的「撤销」会连新编辑一起丢掉，所以此时收起那条提示（Ctrl+Z 仍可逐步撤销）
+  const update = (next: RuyeDocument) => {
+    remember(doc, true);
+    setNotice((n) => (n?.undo ? null : n));
+    applyDoc(next);
+  };
   const remove = (next: RuyeDocument, what: string) => {
-    setDoc(syncTitle(next));
+    remember(doc, false);
+    applyDoc(next);
     setNotice({ text: `已删除${what}。`, undo: doc });
   };
   /**
@@ -110,6 +185,7 @@ export function App() {
       setWriteMode("replace");
     }
     setSavePhase("pending");
+    resetUndo();
     setDocId(id);
     setDoc(next);
     setActiveId(next.modules[0]?.id ?? null);
@@ -123,6 +199,7 @@ export function App() {
     if (!r) return setNotice({ text: "这份简历无法打开（存档可能已被其他标签页修改）。", level: "error" });
     pristineSample.current = null;
     setCurrentId(id);
+    resetUndo();
     setDocId(id);
     setDoc(r.doc);
     setActiveId(r.doc.modules[0]?.id ?? null);
@@ -130,10 +207,14 @@ export function App() {
     setNotice(r.issues.length ? { text: `已打开。有 ${r.issues.length} 处格式问题需要修正。`, level: "error", sticky: true } : null);
   }
 
-  function deleteDoc(id: string, label: string) {
-    if (!confirm(`删除「${label}」？删除后不能恢复，需要的话先导出备份。`)) return;
+  async function deleteDoc(id: string, label: string) {
+    const target = id === docId ? doc : loadDocument(id)?.doc;
+    // 先放进回收站；回收站不可用（例如浏览器禁用了 IndexedDB）时才是真删除，要明确告诉用户
+    const trashed = target ? await moveToTrash(id, target) : false;
+    if (!trashed && !confirm(`删除「${label}」？这个浏览器的回收站不可用，删除后不能恢复，需要的话先导出备份。`)) return;
     const err = deleteDocument(id);
     if (err) return setNotice({ text: err, level: "error", sticky: true });
+    if (trashed) setNotice({ text: `「${label}」已放进回收站，30 天内可以在「我的简历」里恢复。` });
     if (id !== docId) return;
     // 删的是当前这份：打开剩下最近的一份；一份都不剩就新建空白
     const next = listDocuments().find((d) => d.id !== id);
@@ -167,6 +248,8 @@ export function App() {
       }
     },
     onNotice: (text, level) => setNotice({ text, level, sticky: level === "error" }),
+    onPulled: (n) =>
+      setNotice({ text: `从云端下载了 ${n} 份简历。`, action: { label: "去看看", run: () => setView("library") } }),
   });
 
   useEffect(() => {
@@ -200,6 +283,53 @@ export function App() {
       if (writeMode === "replace") setWriteMode("merge");
     }
   }, [doc, persist, docId, writeMode]);
+
+  // 本机历史：停止编辑 3 秒后，按规则（间隔 10 分钟、内容有变化）留一份快照。没改过的示例不留
+  useEffect(() => {
+    if (!persist || pristineSample.current === docId) return;
+    const t = setTimeout(() => void recordSnapshot(docId, doc, contentHash(doc)), 3000);
+    return () => clearTimeout(t);
+  }, [doc, docId, persist]);
+
+  // 保存失败或存档读不出来时，关闭页面前提醒一句：屏幕上的内容还没存下来
+  useEffect(() => {
+    if (savePhase !== "failed" && savePhase !== "blocked") return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [savePhase]);
+
+  // 把 .ruye.json / .md 文件直接拖进窗口就能导入（另存为一份新简历）
+  const [dragging, setDragging] = useState(false);
+  useEffect(() => {
+    const hasFile = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].includes("Files");
+    const over = (e: DragEvent) => {
+      if (!hasFile(e)) return;
+      e.preventDefault();
+      setDragging(true);
+    };
+    const leave = (e: DragEvent) => {
+      if (e.relatedTarget === null) setDragging(false);
+    };
+    const drop = (e: DragEvent) => {
+      if (!hasFile(e)) return;
+      e.preventDefault();
+      setDragging(false);
+      const f = e.dataTransfer?.files[0];
+      if (f) void importRef.current(f);
+    };
+    window.addEventListener("dragover", over);
+    window.addEventListener("dragleave", leave);
+    window.addEventListener("drop", drop);
+    return () => {
+      window.removeEventListener("dragover", over);
+      window.removeEventListener("dragleave", leave);
+      window.removeEventListener("drop", drop);
+    };
+  }, []);
 
   // 防抖后重新排版。排版在 Worker 里跑，不卡输入；连续修改时只排最新的一版
   useEffect(() => {
@@ -246,6 +376,11 @@ export function App() {
     }
   }
 
+  const importRef = useRef<(f: File) => Promise<void>>(async () => undefined);
+  importRef.current = async (f: File) => {
+    await importFile(f);
+    setView("editor");
+  };
   async function importFile(file: File) {
     const r = parseImport(file.name, await file.text());
     if (!r.ok) return setNotice({ text: r.message, level: "error", sticky: r.sticky });
@@ -268,6 +403,34 @@ export function App() {
     requestAnimationFrame(() => document.getElementById(`module-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
   }
 
+  // 快捷键：Ctrl+S 不弹浏览器的「另存网页」，告诉用户已经自动保存；Ctrl+P 直接导出 PDF（打印编辑器本身没有意义）
+  const shortcut = useRef<(e: KeyboardEvent) => void>(() => undefined);
+  shortcut.current = (e: KeyboardEvent) => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+    const k = e.key.toLowerCase();
+    // 输入框里的 Ctrl+Z 交给浏览器（撤销刚打的字）；在输入框外才撤销整步操作
+    const el = document.activeElement as HTMLElement | null;
+    const typing = !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+    if ((k === "z" || k === "y") && !typing && view === "editor") {
+      e.preventDefault();
+      if (k === "y" || e.shiftKey) redo();
+      else undo();
+      return;
+    }
+    if (k === "s") {
+      e.preventDefault();
+      setNotice({ text: persist ? "不用手动保存：每次修改都会自动存在这个浏览器里。" : "本地存档读不出来，现在的修改不会保存。先用「导出」备份。", level: persist ? "info" : "error" });
+    } else if (k === "p") {
+      e.preventDefault();
+      if (engineReady && !exporting) exportPdf();
+    }
+  };
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => shortcut.current(e);
+    window.addEventListener("keydown", on);
+    return () => window.removeEventListener("keydown", on);
+  }, []);
+
   // 滚动时高亮大纲里当前所在的模块：取顶部越过编辑区上沿（留 96px）的最后一个模块
   useEffect(() => {
     const el = editorRef.current;
@@ -287,14 +450,44 @@ export function App() {
     return () => el.removeEventListener("scroll", onScroll);
   }, []);
 
-  function onFileMenu(key: string) {
-    if (key === "import") fileInput.current?.click();
-    // 新建和载入示例都另存为新的一份，当前简历留在「我的简历」里，不用再确认
-    else if (key === "new") startNew(createEmptyDocument());
-    else if (key.startsWith("sample:")) {
-      startNew(structuredClone(SAMPLES[key.slice(7)]));
-      setIsSample(true);
+  // 新建、示例、导入都另存为新的一份，当前简历留在「我的简历」里，不用再确认
+  function newBlank() {
+    startNew(createEmptyDocument());
+    setView("editor");
+  }
+  function newFromSample(key: string) {
+    startNew(structuredClone(SAMPLES[key.slice(7)]));
+    setIsSample(true);
+    setView("editor");
+  }
+  function duplicateById(id: string) {
+    const src = id === docId ? doc : loadDocument(id)?.doc;
+    if (!src) return setNotice({ text: "这份简历无法打开，没有复制。", level: "error" });
+    startNew(duplicateDocument(src));
+    setView("editor");
+    setNotice({ text: "已复制为一份新简历，可以改成投另一个岗位的版本。原来那份还在「我的简历」里。" });
+  }
+  function renameById(id: string, alias: string) {
+    if (id === docId) return update(setAlias(doc, alias));
+    const r = loadDocument(id);
+    if (!r) return;
+    const err = putDocument(id, setAlias(r.doc, alias));
+    if (err) setNotice({ text: err, level: "error" });
+  }
+  /** 历史版本恢复：恢复到当前这份就整份替换（可撤销）；恢复别的简历就写入后打开它 */
+  function restoreVersion(id: string, restored: RuyeDocument, when: string) {
+    const next = { ...restored, meta: { ...restored.meta, updatedAt: new Date().toISOString() } };
+    setHistoryFor(null);
+    if (id === docId) {
+      remember(doc, false);
+      applyDoc(next);
+    } else {
+      const err = putDocument(id, next);
+      if (err) return setNotice({ text: err, level: "error" });
+      openDocument(id);
     }
+    setView("editor");
+    setNotice(id === docId ? { text: `已恢复到「${when}」的版本。`, undo: doc } : { text: `已恢复到「${when}」的版本并打开。` });
   }
 
   function onExportMenu(key: string) {
@@ -310,7 +503,7 @@ export function App() {
   }
 
   return (
-    <div className="app" data-skin={skin}>
+    <div className={`app${previewOpen ? "" : " preview-collapsed"}`} data-skin={skin}>
       <header className="topbar">
         <div className="brand">
           <span className="win-dots" aria-hidden="true">
@@ -322,52 +515,45 @@ export function App() {
           <span className="brand-name">
             如页<em>Ruye</em>
           </span>
-          <span className="version">v0.1</span>
         </div>
 
-        <DocSwitcher
-          currentId={docId}
-          currentLabel={doc.meta.alias?.trim() || doc.meta.title}
-          currentAlias={doc.meta.alias ?? ""}
-          listDocuments={listDocuments}
-          onOpen={openDocument}
-          onNew={() => startNew(createEmptyDocument())}
-          onDuplicate={() => {
-            startNew(duplicateDocument(doc));
-            setNotice({ text: "已复制为一份新简历，可以改成投另一个岗位的版本。原来那份还在「我的简历」里。" });
-          }}
-          onDelete={deleteDoc}
-          onAlias={(alias) => update(setAlias(doc, alias))}
-        >
+        <button type="button" className={`library-btn${view === "library" ? " on" : ""}`} aria-pressed={view === "library"} onClick={() => setView(view === "library" ? "editor" : "library")}>
+          <Icon name="layers" size={15} />
+          我的简历
+        </button>
+
+        <div className="doc-meta">
+          <button type="button" className="doc-title" title="在「我的简历」里切换、改名" onClick={() => setView("library")}>
+            {doc.meta.alias?.trim() || doc.meta.title}
+          </button>
           <span className={`save-state${savePhase === "failed" || savePhase === "blocked" ? " blocked" : savePhase === "pending" ? " pending" : issues.length > 0 ? " warn" : ""}`}>
             <i aria-hidden="true" />
             {saveStatusText(savePhase, issues.length)}
           </span>
-        </DocSwitcher>
+        </div>
 
         <div className="actions">
-          <AppearanceMenu doc={doc} onChange={update} />
-          <Menu
-            label={`界面 · ${SKINS.find((s) => s.key === skin)!.label}`}
-            right
-            onPick={(k) => setSkin(k as Skin)}
-            items={SKINS.map((s) => ({ key: s.key, label: s.key === skin ? `✓ ${s.label}` : s.label, hint: s.hint }))}
-          />
-          <AccountMenu cloud={cloud} />
-          <Menu
-            label="文件"
-            onPick={onFileMenu}
-            items={[
-              { key: "import", label: "导入简历", hint: ".ruye.json / .md" },
-              { key: "new", label: "新建空白简历" },
-              ...SAMPLE_MENU,
-            ]}
-          />
+          {view === "editor" && (
+            <span className="undo-group">
+              <button type="button" className="icon-btn" aria-label="撤销" title="撤销（Ctrl+Z）" disabled={past.current.length === 0} onClick={undo}>
+                <Icon name="undo" size={16} />
+              </button>
+              <button type="button" className="icon-btn" aria-label="重做" title="重做（Ctrl+Shift+Z）" disabled={future.current.length === 0} onClick={redo}>
+                <Icon name="redo" size={16} />
+              </button>
+            </span>
+          )}
+          <button type="button" className="icon-btn" aria-label="历史版本" title="历史版本" onClick={() => setHistoryFor(docId)}>
+            <Icon name="history" size={16} />
+          </button>
+          {view === "editor" && <AppearanceMenu doc={doc} onChange={update} skin={skin} onSkin={setSkin} />}
+          <AccountMenu cloud={cloud} loginSignal={loginSignal} />
           <Menu
             label="导出"
+            right
             onPick={onExportMenu}
             items={[
-              { key: "json", label: "导出 .ruye.json", hint: "可再次导入" },
+              { key: "json", label: "导出 .ruye.json", hint: "备份，可再次导入" },
               { key: "md", label: "导出 Markdown", hint: "可版本管理" },
             ]}
           />
@@ -406,11 +592,21 @@ export function App() {
               {notice.undo && (
                 <button
                   onClick={() => {
-                    setDoc(notice.undo!);
+                    undo();
                     setNotice(null);
                   }}
                 >
                   撤销
+                </button>
+              )}
+              {notice.action && (
+                <button
+                  onClick={() => {
+                    notice.action!.run();
+                    setNotice(null);
+                  }}
+                >
+                  {notice.action.label}
                 </button>
               )}
               <button aria-label="关闭提示" onClick={() => setNotice(null)}>
@@ -421,6 +617,41 @@ export function App() {
         )}
       </div>
 
+      {view === "library" ? (
+        <Library
+          currentId={docId}
+          currentDoc={doc}
+          listDocuments={listDocuments}
+          cloud={{
+            enabled: cloud.enabled,
+            email: cloud.session?.user.email ?? null,
+            userId: cloud.session?.user.id ?? null,
+            api: cloud.api,
+            statusText: cloud.status.text,
+            syncing: cloud.status.phase === "syncing",
+            syncNow: cloud.syncNow,
+            onLogin: () => setLoginSignal((x) => x + 1),
+          }}
+          onOpen={(id) => {
+            if (id !== docId) openDocument(id);
+            setView("editor");
+          }}
+          onNew={newBlank}
+          onSample={newFromSample}
+          onImport={() => fileInput.current?.click()}
+          onDuplicate={duplicateById}
+          onDelete={deleteDoc}
+          onRename={renameById}
+          onHistory={setHistoryFor}
+          onRestored={(id, note) => {
+            openDocument(id);
+            setView("editor");
+            setNotice({ text: note });
+          }}
+          onError={(text) => setNotice({ text, level: "error" })}
+          onClose={() => setView("editor")}
+        />
+      ) : (
       <main className="panes">
         <Sidebar doc={doc} activeId={activeId} onSelect={jumpTo} onChange={update} onAdd={addNewModule} />
 
@@ -506,12 +737,21 @@ export function App() {
           </div>
         </section>
 
+        {previewOpen ? (
         <section className="preview" aria-label="A4 预览">
-          <Preview data={preview} error={fatal} busy={busy} zoom={zoom} onZoom={setZoom} />
+          <Preview data={preview} error={fatal} busy={busy} zoom={zoom} onZoom={setZoom} onCollapse={() => togglePreview(false)} />
         </section>
+        ) : (
+          <button type="button" className="preview-rail" onClick={() => togglePreview(true)} aria-label="展开 A4 预览">
+            <Icon name="panelRight" size={16} />
+            <span>展开预览</span>
+            {preview?.result && <em className={describeFit(preview.result).level}>{describeFit(preview.result).short}</em>}
+          </button>
+        )}
       </main>
+      )}
 
-      <StatusBar
+      {view === "editor" && <StatusBar
         items={[
           "markdown · utf-8",
           templateMeta(doc.layout.templateId).name,
@@ -522,8 +762,26 @@ export function App() {
           })(),
           saveStatusText(savePhase, issues.length),
         ]}
-      />
+      />}
 
+      {dragging && (
+        <div className="drop-hint" aria-hidden="true">
+          <span>松开即可导入：.ruye.json 或 Markdown，会另存为一份新简历</span>
+        </div>
+      )}
+      {historyFor && (
+        <HistoryDialog
+          docId={historyFor}
+          label={(() => {
+            const d = historyFor === docId ? doc : loadDocument(historyFor)?.doc;
+            return d ? d.meta.alias?.trim() || d.meta.title : historyFor;
+          })()}
+          current={historyFor === docId ? doc : (loadDocument(historyFor)?.doc ?? doc)}
+          api={cloud.api}
+          onRestore={(d, when) => restoreVersion(historyFor, d, when)}
+          onClose={() => setHistoryFor(null)}
+        />
+      )}
       {overflowDialog && <OverflowDialog onExport={(m) => exportPdf(m)} onClose={() => setOverflowDialog(false)} />}
     </div>
   );

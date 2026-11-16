@@ -35,6 +35,11 @@ test("设备 A 修改后上传，设备 B 登录后能看到这份简历", async
   await ready(b);
   await signIn(b, "登录");
   await expect(b.locator(".account-btn.signed-in")).toHaveAttribute("title", /下载 1 份/, { timeout: 30_000 });
-  await b.locator(".doc-trigger").click();
-  await expect(b.getByText("同步端到端-Java 后端实习生")).toBeVisible();
+  // 「我的简历」里能看到 A 上传的那份，并标着已同步；历史版本里能看到云端当前版本
+  await b.getByRole("button", { name: "我的简历", exact: true }).click();
+  const card = b.locator(".doc-card").filter({ hasText: "同步端到端-Java 后端实习生" });
+  await expect(card).toBeVisible();
+  await expect(card.locator(".sync-badge")).toHaveText("已同步");
+  await card.getByRole("button", { name: "历史版本" }).click();
+  await expect(b.getByRole("dialog").getByText("云端 · 当前")).toBeVisible();
 });

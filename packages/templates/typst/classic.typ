@@ -1,6 +1,6 @@
 // 如页 · classic「经典 · 简洁」
 // 面向投递的默认模板：白底、单一主色、无大面积色块，打印和 ATS 解析都稳妥。
-// 页眉：姓名与求职意向同一行，下一行联系方式，底部双线；照片在右侧。
+// 页眉：左栏姓名 + 求职意向（主色竖条收边），右栏联系方式小表格；照片在最右。
 // 模块标题：主色方块 + 粗体标题 + 一条贯穿到右边的细线。原创版式。
 #import "common.typ": *
 
@@ -21,33 +21,53 @@
   )
 })
 
-// 页眉：姓名与求职意向同一行（意向沿姓名基线对齐），下一行是联系方式（细竖线分隔），
-// 底部一粗一细两条线收住。照片在右侧，与文字顶端对齐。左对齐比三行居中更紧凑、更有重心。
+// 页眉：左右两栏。左栏是姓名和求职意向，左边一条主色竖条把它们收成一块；
+// 右栏是联系方式，图标 + 文字排成整齐的小表格（四项以上两列），不再挤成一长行。
+// 底部一条细线，左端一段主色粗线压在上面。照片（如有）在最右侧。
 #let header() = {
+  let d = if basic-module != none { basic-module.data } else { (:) }
   let name = if basic-module != none {
-    text(size: t.namePt * 1.08pt, weight: "bold", fill: ink, tracking: 0.1em)[#basic-module.data.name]
+    text(size: t.namePt * 1.12pt, weight: "bold", fill: ink, tracking: 0.12em)[#d.name]
   }
-  let role = if intention-module != none { intention-row(intention-module.data) }
-  let first = if role == none { name } else {
-    box(name)
-    h(1em)
-    box(baseline: 0pt, text(size: body-size * 1.02)[#role])
-  }
-  let bar = text(fill: hairline.darken(20%))[#h(0.55em)|#h(0.55em)]
-  let contacts = if basic-module != none { contact-row(basic-module.data, icon-color: accent, sep: bar) }
-  let body = {
+  // 求职意向拆成两行：岗位单独一行（主色加粗），城市、到岗、薪资等放下一行的灰色小字；
+  // 每项是一个不可拆的盒子，放不下时整项换行，不会把「可实习 6 个月」拆成两半
+  let it = if intention-module != none { intention-module.data } else { (:) }
+  let role = get(it, "role")
+  let rest = (get(it, "city"), get(it, "availability"), get(it, "salary")).filter(x => x != none)
+  let lhs = {
     set par(justify: false, leading: lead * 0.8)
-    if first != none { block(first) }
-    if contacts != none { v(lead + 1.8mm); block(contacts) }
+    if name != none { block(name) }
+    if role != none {
+      v(lead + 1.6mm)
+      block(text(size: body-size * 1.08, weight: "bold", fill: accent)[#icon("target", size: 0.88em) #h(0.15em) #role])
+    }
+    if rest.len() > 0 {
+      v(lead + 0.6mm)
+      block(text(size: meta-size, fill: muted, rest.map(x => box[#x]).join([#h(0.5em)#text(fill: hairline.darken(25%))[|]#h(0.5em)])))
+    }
   }
+  let items = contact-items(d)
+  let contacts = if items.len() > 0 {
+    let cols = if items.len() >= 4 { 2 } else { 1 }
+    text(size: meta-size, fill: ink.lighten(12%), grid(
+      columns: cols,
+      column-gutter: 5mm,
+      row-gutter: lead + 1.4mm,
+      ..items.map(((ic, c)) => box[#icon(ic, color: accent) #h(0.25em) #c]),
+    ))
+  }
+  let bar = block(stroke: (left: 1.3mm + accent), inset: (left: 4.2mm, y: 0.6mm), lhs)
+  let cells = (bar,)
+  let cols = (1fr,)
+  if contacts != none { cells.push(contacts); cols.push(auto) }
+  if photo-path != none { cells.push(photo-box(20mm)); cols.push(20mm) }
   block(breakable: false, width: 100%, {
-    if photo-path != none {
-      grid(columns: (1fr, 20mm), column-gutter: 6mm, align: (left + bottom, right + top), body, photo-box(20mm))
-    } else { body }
-    v(2.6mm)
-    line(length: 100%, stroke: 1.6pt + accent)
-    v(0.6mm)
-    line(length: 100%, stroke: 0.4pt + accent.lighten(40%))
+    grid(columns: cols, column-gutter: 6mm, align: horizon, ..cells)
+    v(3.6mm)
+    block(width: 100%, {
+      line(length: 100%, stroke: 0.5pt + accent.lighten(55%))
+      place(top + left, dy: -0.7pt, line(length: 26mm, stroke: 1.9pt + accent))
+    })
   })
 }
 

@@ -54,6 +54,8 @@ export interface BasicInfoModule extends ModuleBase {
     photoDataUrl?: string;
     gender?: string;
     birthday?: string;
+    /** 简历上把出生年月显示成年龄（「19 岁」）还是日期（「2006.12」）；默认日期 */
+    birthdayAs?: "date" | "age";
     phone?: string;
     email?: string;
     location?: string;

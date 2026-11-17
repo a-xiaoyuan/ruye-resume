@@ -284,9 +284,9 @@ export class LayoutEngine {
 
   /**
    * 模块 / 条目占高：把它从文档里拿掉重新排版，差值就是它占的真实高度（含间距）。
-   * 只在溢出时做（最多十几次编译），平时不付这个成本。
+   * 溢出时连同最大模块里每个条目一起量（最多十几次编译）；预览里的版面标尺只量模块（items = false）。
    */
-  async attachBreakdown(doc: RuyeDocument, template: TemplateDef, tokens: TypographyTokens, metrics: LayoutMetrics): Promise<void> {
+  async attachBreakdown(doc: RuyeDocument, template: TemplateDef, tokens: TypographyTokens, metrics: LayoutMetrics, items = true): Promise<void> {
     const rdoc = renderableDoc(doc);
     const full = await this.contentHeightMm(rdoc, template, tokens);
     const without = (modules: Module[]) => this.contentHeightMm({ ...rdoc, modules }, template, tokens);
@@ -300,7 +300,7 @@ export class LayoutEngine {
     metrics.moduleHeights.sort((a, b) => b.heightMm - a.heightMm);
 
     const top = rdoc.modules.find((m) => m.id === metrics.moduleHeights[0]?.moduleId);
-    if (top && "items" in top.data && top.data.items.length > 1) {
+    if (items && top && "items" in top.data && top.data.items.length > 1) {
       metrics.itemHeights = [];
       for (const it of top.data.items) {
         const reduced = { ...top, data: { ...top.data, items: top.data.items.filter((x: { id: string }) => x.id !== it.id) } } as Module;

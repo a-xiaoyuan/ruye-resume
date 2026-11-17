@@ -12,8 +12,8 @@ const KEY = "ruye.skin";
 export function loadSkin(): Skin {
   try {
     const v = localStorage.getItem(KEY);
-    // 旧版本的「终端」「稿纸」「撞色」都并入了深色 / 浅色
-    return v === "dark" || v === "terminal" ? "dark" : "paper";
+    // 只有自己选过「深色」才用深色；旧版本的「终端」「稿纸」「撞色」一律回到浅色
+    return v === "dark" ? "dark" : "paper";
   } catch {
     return "paper";
   }

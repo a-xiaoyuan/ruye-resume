@@ -231,6 +231,15 @@ test("预览 SVG 只保留安全链接", () => {
   assert.ok(out.includes('xlink:href="#g1"') && out.includes("https://a.com") && out.includes("mailto:a@b.c"));
 });
 
+test("预览 SVG 保留 <image> 里内嵌的图片（图标、照片），<a> 上的 data: 照样清掉", () => {
+  const svg = `<svg><image xlink:href="data:image/svg+xml;base64,PHN2Zy8+" width="9"/><image href="data:image/png;base64,AAAA"/><image xlink:href="javascript:x"/><a xlink:href="data:image/png;base64,AAAA"></a></svg>`;
+  const out = sanitizeSvgLinks(svg);
+  assert.ok(out.includes('xlink:href="data:image/svg+xml;base64,PHN2Zy8+"'));
+  assert.ok(out.includes('href="data:image/png;base64,AAAA"/>'));
+  assert.ok(!/javascript:/i.test(out));
+  assert.ok(out.includes('<a xlink:href="#">'));
+});
+
 test("照片数据损坏或格式不符时跳过照片，不让整份文档失败", () => {
   const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==";
   assert.ok(decodeDataUrl(`data:image/png;base64,${png}`));

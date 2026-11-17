@@ -284,3 +284,14 @@ test("自我评价：空白不算内容；text 必须是字符串；「个人评
   assert.ok(sm.type === "summary");
   assert.equal(sm.data.text, "踏实\n肯干");
 });
+
+test("出生年月可以显示成年龄：按今天算周岁", async () => {
+  const { ageFrom, renderableModules } = await import("../packages/schema/src/index.ts");
+  const today = new Date(2026, 10, 16);
+  assert.equal(ageFrom("2006-12", today), 19);
+  assert.equal(ageFrom("2006-11", today), 20);
+  assert.equal(ageFrom("", today), null);
+  const doc = { modules: [{ id: "b", type: "basic_info", visible: true, data: { name: "林知夏", birthday: "2006-12", birthdayAs: "age" } }] } as never;
+  const [b] = renderableModules(doc, today) as { data: { birthday: string } }[];
+  assert.equal(b.data.birthday, "19 岁");
+});

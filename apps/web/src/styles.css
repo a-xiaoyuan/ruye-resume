@@ -784,3 +784,272 @@ kbd { display: inline-block; padding: 0 5px; margin: 0 1px; font-family: inherit
 .app[data-skin="dark"] .dialog, .app[data-skin="dark"] .login-dialog .field input { background: var(--paper); color: var(--ink); }
 .app[data-skin="dark"] .drop-hint { background: rgba(16, 19, 26, 0.85); }
 .app[data-skin="dark"] .doc-card-actions button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.06); }
+
+/* ============================================================
+   第五版：排版台
+   画布是一张铺满的浅群青桌面（点阵表示这是排版用的画布），A4 纸是主角放在正中；
+   写作面板是一张浮在左边的白卡片。招牌：贴在纸右边的「版面标尺」，按模块切开 297 mm。
+   颜色：群青 #2f4cdd 是唯一强调色；墨色写字；状态色只在有意义的地方出现。
+   ============================================================ */
+:root {
+  --brand: #2f4cdd;
+  --brand-strong: #2238b8;
+  --brand-soft: #e3e8fd;
+  --brand-softer: #f1f4fe;
+  --canvas: #e4e9f5;
+  --canvas-dot: rgba(47, 76, 221, 0.13);
+  --ink-deep: #141c3a;
+  --card-shadow: 0 1px 2px rgba(20, 28, 58, 0.06), 0 24px 48px -24px rgba(20, 28, 58, 0.32);
+  --font-display: var(--font-title);
+}
+.app { background: var(--canvas); }
+
+/* 顶栏：不再是一条色带，直接放在画布上；右侧操作收进一枚白色胶囊 */
+.topbar { height: 64px; padding: 0 16px 0 22px; background: transparent; border: 0; color: var(--ink); gap: 16px; }
+.brand-name { color: var(--ink-deep); font-size: 20px; letter-spacing: 0.08em; }
+.brand-name em { color: var(--faint); letter-spacing: 0.02em; }
+.library-btn, .topbar .icon-btn, .actions > .menu > .menu-trigger, .actions > .account > button, .actions .account-btn { color: var(--muted); }
+.library-btn:hover:not(:disabled), .doc-title:hover:not(:disabled), .topbar .icon-btn:hover:not(:disabled),
+.actions > .menu > .menu-trigger:hover, .actions .account-btn:hover:not(:disabled),
+.actions > .menu > .menu-trigger[aria-expanded="true"] { background: var(--brand-softer); color: var(--ink); }
+.library-btn { background: rgba(255, 255, 255, 0.55); border: 1px solid rgba(255, 255, 255, 0.7); }
+.library-btn.on { background: var(--ink-deep); color: #fff; border-color: var(--ink-deep); }
+.doc-meta { border-left-color: rgba(20, 28, 58, 0.12); }
+.doc-title { color: var(--ink-deep); font-size: 15px; }
+.save-state { color: var(--muted); }
+.save-state i { background: var(--ok); }
+.save-state.warn, .save-state.pending { color: var(--warn); }
+.save-state.blocked { color: var(--err); }
+.appearance-current { color: var(--ink); border-left-color: var(--line-strong); }
+.appearance-label { color: var(--muted); }
+.topbar .menu-trigger .caret { color: var(--faint); }
+.topbar :focus-visible { outline-color: var(--brand); }
+.undo-group { border-right-color: var(--line); }
+.actions { gap: 2px; padding: 5px; background: rgba(255, 255, 255, 0.82); border: 1px solid rgba(255, 255, 255, 0.9); border-radius: 14px; box-shadow: 0 1px 2px rgba(20, 28, 58, 0.06), 0 8px 24px -14px rgba(20, 28, 58, 0.35); backdrop-filter: blur(10px); }
+.topbar button.primary, .actions button.primary { margin-left: 6px; padding: 8px 16px; border-radius: 10px; background: var(--brand); border-color: var(--brand); color: #fff; box-shadow: 0 6px 14px -6px rgba(47, 76, 221, 0.7); }
+.topbar button.primary:hover:not(:disabled) { background: var(--brand-strong); border-color: var(--brand-strong); }
+
+/* 舞台：画布 + 左边的写作面板 + 中间的纸 */
+.stage {
+  flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(400px, 492px) minmax(0, 1fr); gap: 8px; padding: 0 14px 14px;
+  background-color: var(--canvas);
+  background-image: radial-gradient(var(--canvas-dot) 1px, transparent 1.2px);
+  background-size: 22px 22px;
+}
+.studio { position: relative; min-height: 0; display: flex; flex-direction: column; background: var(--paper); border-radius: 18px; box-shadow: var(--card-shadow); overflow: hidden; }
+.studio .editor { flex: 1; min-height: 0; overflow-y: auto; background: none; border: 0; }
+.studio .doc-editor { max-width: none; margin: 0; padding: 0 30px 45vh; }
+.studio .module-editor { padding: 30px 0 34px; }
+.studio .module-editor + .module-editor { border-top: 1px solid var(--line); }
+.editor-head h2 { font-family: var(--font-display); font-size: 21px; letter-spacing: 0.06em; color: var(--ink-deep); }
+.studio .form-grid { gap: 14px 14px; }
+
+/* 模块标签 */
+.module-pills { display: flex; flex-wrap: wrap; gap: 6px; padding: 14px 18px 12px; border-bottom: 1px solid var(--line); background: var(--paper); }
+.module-pills button { padding: 5px 12px; font-size: 13px; line-height: 20px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); color: var(--muted); }
+.module-pills button:hover:not(:disabled) { border-color: #c4cdee; background: var(--brand-softer); color: var(--ink); }
+.module-pills button.on { background: var(--ink-deep); border-color: var(--ink-deep); color: #fff; font-weight: 600; }
+.module-pills button.hidden-module { color: var(--faint); text-decoration: line-through; text-decoration-color: var(--line-strong); }
+.module-pills .manage { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; border-style: dashed; color: var(--muted); }
+.module-pills .manage.on { background: var(--brand-soft); border-color: var(--brand); border-style: solid; color: var(--brand); font-weight: 600; }
+.structure-pop { position: absolute; z-index: 25; top: 58px; right: 14px; width: 300px; max-height: calc(100% - 72px); overflow-y: auto; padding: 16px 10px 12px; background: var(--paper); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-pop); animation: pop 0.12s ease-out; }
+.structure-pop .sidebar { background: none; border: 0; padding: 0; overflow: visible; }
+
+/* 纸所在的画布 */
+.stage .preview { min-height: 0; overflow-y: auto; background: none; padding: 0 12px 0; border-radius: 18px; }
+.stage .preview-inner { display: flex; flex-direction: column; min-height: 100%; max-width: 860px; }
+.stage .preview-toolbar {
+  order: 2; position: sticky; top: auto; bottom: 14px; align-self: center; z-index: 5; margin: 6px 0 14px; padding: 6px 6px 6px 16px;
+  background: rgba(255, 255, 255, 0.9); border: 1px solid rgba(255, 255, 255, 0.95); border-radius: 999px; backdrop-filter: blur(10px);
+  box-shadow: 0 1px 2px rgba(20, 28, 58, 0.06), 0 12px 28px -14px rgba(20, 28, 58, 0.45);
+}
+.stage .zoom { margin-left: 14px; border-radius: 999px; border-color: var(--line); }
+.stage .board-wrap { padding: 26px 124px 30px 40px; }
+.stage .board { box-shadow: 0 1px 2px rgba(20, 28, 58, 0.08), 0 30px 60px -28px rgba(20, 28, 58, 0.45); }
+.stage .crop::before, .stage .crop::after { background: #8a96b8; }
+.stage .a4-edge { display: none; }
+.stage .caption { margin-top: 18px; color: var(--muted); }
+
+/* 版面标尺 */
+.page-meter { position: absolute; top: 0; bottom: 0; right: -26px; width: 8px; }
+.page-meter::before { content: ""; position: absolute; left: 3px; top: 0; height: calc(297 / var(--board-mm, 297) * 100%); width: 2px; background: rgba(20, 28, 58, 0.1); border-radius: 2px; }
+.meter-seg { position: absolute; left: 0; width: 8px; padding: 0; border: 0; border-radius: 4px; box-shadow: 0 0 0 1.5px var(--canvas); cursor: pointer; transition: width 0.15s, left 0.15s; }
+.meter-seg.c0 { background: #2f4cdd; } .meter-seg.c1 { background: #5a72ea; } .meter-seg.c2 { background: #8a9bf1; }
+.meter-seg.c3 { background: #2c8fb8; } .meter-seg.c4 { background: #5fb0cf; } .meter-seg.c5 { background: #8e9bc0; }
+.meter-seg.over { background: var(--proof); }
+.meter-seg:hover:not(:disabled), .meter-seg:focus-visible { width: 12px; left: -2px; }
+.meter-seg span { position: absolute; left: 18px; top: 1px; display: flex; flex-direction: column; text-align: left; white-space: nowrap; font-size: 11.5px; font-weight: 600; line-height: 1.35; color: var(--ink-deep); pointer-events: none; }
+.meter-seg em { font-style: normal; font-weight: 400; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.meter-seg:hover span { color: var(--brand); }
+
+/* 收起预览：写作面板占满，右边留一条细栏 */
+.app.preview-collapsed .stage { grid-template-columns: minmax(0, 1fr) 46px; }
+.app.preview-collapsed .studio .doc-editor { max-width: 760px; margin: 0 auto; }
+.stage .preview-rail { border-radius: 14px; background: rgba(255, 255, 255, 0.6); }
+.stage .preview-rail:hover:not(:disabled) { background: #fff; }
+
+/* 我的简历页也放在画布上 */
+.library { background-color: var(--canvas); background-image: radial-gradient(var(--canvas-dot) 1px, transparent 1.2px); background-size: 22px 22px; }
+.library-head h1 { color: var(--ink-deep); }
+.doc-card { border-radius: 16px; box-shadow: var(--card-shadow); }
+.doc-card.current { box-shadow: 0 0 0 2px var(--brand), var(--card-shadow); }
+.cloud-strip, .plain-list { border-radius: 14px; box-shadow: var(--card-shadow); }
+
+@media (max-width: 1180px) {
+  .stage { grid-template-columns: 1fr; overflow-y: auto; }
+  .studio { min-height: 70vh; }
+  .stage .board-wrap { padding-right: 110px; }
+}
+
+/* 深色：画布更深，写作面板是深灰卡片 */
+.app[data-skin="dark"] {
+  --canvas: #0d111b;
+  --canvas-dot: rgba(138, 166, 255, 0.12);
+  --ink-deep: #eef1f8;
+  --brand: #8aa6ff;
+  --brand-strong: #a8bdff;
+  --card-shadow: 0 0 0 1px #232a3a, 0 24px 48px -24px rgba(0, 0, 0, 0.8);
+}
+.app[data-skin="dark"] .actions { background: rgba(25, 29, 38, 0.85); border-color: #2a303d; }
+.app[data-skin="dark"] .library-btn { background: rgba(25, 29, 38, 0.6); border-color: #2a303d; }
+.app[data-skin="dark"] .library-btn.on, .app[data-skin="dark"] .module-pills button.on { background: var(--brand); border-color: var(--brand); color: #0d1430; }
+.app[data-skin="dark"] .topbar button.primary { color: #0d1430; box-shadow: none; }
+.app[data-skin="dark"] .stage .preview-toolbar { background: rgba(25, 29, 38, 0.9); border-color: #2a303d; }
+.app[data-skin="dark"] .meter-seg { box-shadow: 0 0 0 1.5px var(--canvas); }
+.app[data-skin="dark"] .stage .preview-rail { background: rgba(25, 29, 38, 0.6); }
+.module-pills button.on, .module-pills button.on:hover:not(:disabled) { background: var(--ink-deep); border-color: var(--ink-deep); color: #fff; }
+.app[data-skin="dark"] .module-pills button.on, .app[data-skin="dark"] .module-pills button.on:hover:not(:disabled) { background: var(--brand); border-color: var(--brand); color: #0d1430; }
+.library-btn.on, .library-btn.on:hover:not(:disabled) { background: var(--ink-deep); border-color: var(--ink-deep); color: #fff; }
+.app[data-skin="dark"] .library-btn.on, .app[data-skin="dark"] .library-btn.on:hover:not(:disabled) { background: var(--brand); border-color: var(--brand); color: #0d1430; }
+
+/* ============================================================
+   第六版：动起来
+   背景是缓慢流动的极光色块 + 会躲开鼠标、彼此连线的光点（Backdrop.tsx）；
+   面板是半透明的毛玻璃；纸跟着鼠标微微倾斜，每次排版扫过一道光；
+   装进一页的瞬间迸出一圈光点；「下载 PDF」的边框上有一圈流光。
+   系统开了「减少动态效果」时，这些都停下来。
+   ============================================================ */
+:root {
+  --glass: rgba(255, 255, 255, 0.66);
+  --glass-strong: rgba(255, 255, 255, 0.82);
+  --glass-line: rgba(255, 255, 255, 0.85);
+  --violet: #7c5cff;
+  --pink: #ec4899;
+  --teal: #14b8a6;
+}
+.app { position: relative; isolation: isolate; background: #eef0fb; }
+.backdrop { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; background: #eef0fb; }
+.backdrop canvas { position: absolute; inset: 0; }
+.aurora { position: absolute; width: 46vw; height: 46vw; border-radius: 50%; filter: blur(70px); opacity: 0.55; will-change: transform; }
+.aurora.a1 { left: -10vw; top: -14vw; background: #9fb4ff; animation: drift1 22s ease-in-out infinite alternate; }
+.aurora.a2 { right: -12vw; top: -10vw; background: #f7b6d7; animation: drift2 26s ease-in-out infinite alternate; }
+.aurora.a3 { right: 4vw; bottom: -20vw; background: #a5ecdf; animation: drift3 30s ease-in-out infinite alternate; }
+.aurora.a4 { left: 18vw; bottom: -24vw; background: #cdb9ff; animation: drift1 34s ease-in-out infinite alternate-reverse; }
+@keyframes drift1 { to { transform: translate(14vw, 10vw) scale(1.15); } }
+@keyframes drift2 { to { transform: translate(-12vw, 14vw) scale(0.9); } }
+@keyframes drift3 { to { transform: translate(-16vw, -8vw) scale(1.2); } }
+
+/* 透明的舞台，让背景透出来 */
+.stage, .library { background: transparent !important; background-image: none !important; }
+
+/* 毛玻璃面板 */
+.studio { background: var(--glass); backdrop-filter: blur(22px) saturate(1.4); -webkit-backdrop-filter: blur(22px) saturate(1.4); border: 1px solid var(--glass-line); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 30px 60px -34px rgba(40, 50, 140, 0.45); }
+.module-pills { background: rgba(255, 255, 255, 0.5); border-bottom-color: rgba(20, 28, 58, 0.06); }
+.module-pills button { background: rgba(255, 255, 255, 0.7); border-color: rgba(20, 28, 58, 0.07); }
+.module-pills button.on, .module-pills button.on:hover:not(:disabled) { background: linear-gradient(135deg, #2f4cdd, #7c5cff); border-color: transparent; color: #fff; box-shadow: 0 6px 16px -8px rgba(80, 70, 230, 0.8); }
+.studio .field-block input, .studio .field-block textarea, .studio .tag-input, .studio .date-trigger, .studio .skill-name { background: rgba(255, 255, 255, 0.78); }
+.studio .module-editor + .module-editor { border-top-color: rgba(20, 28, 58, 0.07); }
+.studio .item-list, .studio .item-card { border-color: rgba(20, 28, 58, 0.07); }
+.editor-head h2 { background: linear-gradient(100deg, #141c3a 30%, #2f4cdd 70%, #7c5cff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.actions { background: var(--glass-strong); backdrop-filter: blur(16px) saturate(1.4); }
+.library-btn { background: var(--glass); backdrop-filter: blur(12px); }
+.stage .preview-toolbar { background: var(--glass-strong); backdrop-filter: blur(16px) saturate(1.4); }
+.doc-card, .cloud-strip, .plain-list { background: var(--glass-strong); backdrop-filter: blur(16px); }
+
+/* 「下载 PDF」：一圈流动的光边 */
+.actions button.primary { position: relative; isolation: isolate; overflow: hidden; border: 0; background: linear-gradient(135deg, #2f4cdd, #6d4cff); }
+.actions button.primary::before {
+  content: ""; position: absolute; inset: -60%; z-index: -2;
+  background: conic-gradient(from 0deg, transparent 0 55%, rgba(255, 255, 255, 0.95) 65%, transparent 75% 100%);
+  animation: spin 3.2s linear infinite;
+}
+.actions button.primary::after { content: ""; position: absolute; inset: 1.5px; z-index: -1; border-radius: 9px; background: linear-gradient(135deg, #2f4cdd, #6d4cff); }
+.actions button.primary:hover:not(:disabled)::after { background: linear-gradient(135deg, #2238b8, #5b3cf0); }
+@keyframes spin { to { transform: rotate(1turn); } }
+
+/* 纸：跟着鼠标微微倾斜，表面有一道随光线移动的高光 */
+.stage .board-wrap { perspective: 1600px; }
+.stage .board { transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); transform-style: preserve-3d; transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), width 0.16s ease-out; }
+.sheen { position: absolute; inset: 0; z-index: 3; pointer-events: none; background: radial-gradient(600px circle at var(--gx, 50%) var(--gy, 30%), rgba(255, 255, 255, 0.0), rgba(120, 140, 255, 0.07) 40%, transparent 70%); mix-blend-mode: multiply; }
+/* 每次重新排版扫过的一道光 */
+.scan { position: absolute; left: 0; right: 0; top: 0; height: 18%; z-index: 4; pointer-events: none; background: linear-gradient(180deg, transparent, rgba(124, 92, 255, 0.10) 60%, rgba(47, 76, 221, 0.22) 96%, transparent); animation: scan 0.9s cubic-bezier(0.3, 0.6, 0.2, 1) both; }
+@keyframes scan { from { transform: translateY(-100%); opacity: 1; } to { transform: translateY(560%); opacity: 0; } }
+
+/* 装进一页的那一刻：一圈光点 */
+.fit-pill { position: relative; }
+.sparks { position: absolute; left: 4px; top: 50%; width: 0; height: 0; pointer-events: none; }
+.sparks i { position: absolute; width: 5px; height: 5px; margin: -2.5px; border-radius: 50%; background: hsl(var(--h), 85%, 60%); animation: spark 0.8s cubic-bezier(0.1, 0.7, 0.3, 1) forwards; }
+@keyframes spark { from { transform: rotate(var(--a)) translateX(0) scale(1); opacity: 1; } to { transform: rotate(var(--a)) translateX(var(--d)) scale(0.2); opacity: 0; } }
+.fit-pill.ok i { box-shadow: 0 0 0 4px rgba(29, 122, 85, 0.15); animation: pulse 2.4s ease-in-out infinite; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 7px rgba(29, 122, 85, 0); } }
+
+/* 版面标尺：发一点光 */
+.meter-seg { box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.9), 0 0 12px -2px currentColor; }
+.meter-seg.c0 { color: #2f4cdd; } .meter-seg.c1 { color: #5a72ea; background: #7c5cff; } .meter-seg.c2 { color: #ec4899; background: #ec4899; }
+.meter-seg.c3 { color: #14b8a6; background: #14b8a6; } .meter-seg.c4 { color: #f59e0b; background: #f59e0b; } .meter-seg.c5 { color: #6366f1; background: #6366f1; }
+
+/* 进场：顶栏、写作面板、纸依次出现 */
+.topbar { animation: rise 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.studio { animation: rise 0.7s 0.08s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.stage .preview { animation: rise 0.8s 0.16s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } }
+
+/* 条目展开、卡片悬停：一点点抬起 */
+.studio .item-card.open { background: rgba(255, 255, 255, 0.55); border-radius: 12px; margin: 4px -10px; padding-left: 10px; padding-right: 10px; box-shadow: 0 12px 30px -20px rgba(40, 50, 140, 0.4); }
+.doc-card { transition: transform 0.2s, box-shadow 0.2s; }
+.doc-card:hover { transform: translateY(-3px); }
+
+/* 深色：背景换成夜空，光点更亮 */
+.app[data-skin="dark"] { --glass: rgba(22, 26, 38, 0.66); --glass-strong: rgba(22, 26, 38, 0.8); --glass-line: rgba(255, 255, 255, 0.08); background: #0b0e17; }
+.app[data-skin="dark"] .backdrop { background: #0b0e17; }
+.app[data-skin="dark"] .aurora { opacity: 0.28; }
+.app[data-skin="dark"] .editor-head h2 { background: linear-gradient(100deg, #eef1f8 30%, #8aa6ff 70%, #b49cff); -webkit-background-clip: text; background-clip: text; }
+.app[data-skin="dark"] .module-pills, .app[data-skin="dark"] .module-pills button { background: rgba(255, 255, 255, 0.04); border-color: rgba(255, 255, 255, 0.08); }
+.app[data-skin="dark"] .studio .field-block input, .app[data-skin="dark"] .studio .field-block textarea, .app[data-skin="dark"] .studio .tag-input, .app[data-skin="dark"] .studio .date-trigger { background: rgba(255, 255, 255, 0.04); }
+
+@media (prefers-reduced-motion: reduce) {
+  .aurora, .actions button.primary::before, .scan, .sparks, .fit-pill.ok i { animation: none !important; }
+  .stage .board { transform: none !important; }
+}
+
+/* ---------------- 左边也动起来 ---------------- */
+/* 面板更透：背后的光点和极光能透过来 */
+.studio { background: rgba(255, 255, 255, 0.46); backdrop-filter: blur(9px) saturate(1.5); -webkit-backdrop-filter: blur(9px) saturate(1.5); }
+.module-pills { background: rgba(255, 255, 255, 0.35); }
+/* 跟着鼠标的一团柔光，和一圈随鼠标亮起的边框 */
+.studio::before { content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; border-radius: inherit;
+  background: radial-gradient(420px circle at var(--mx, -999px) var(--my, -999px), rgba(124, 92, 255, 0.10), rgba(47, 76, 221, 0.05) 40%, transparent 70%); }
+.studio::after { content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none; border-radius: inherit; padding: 1.5px;
+  background: radial-gradient(260px circle at var(--mx, -999px) var(--my, -999px), rgba(124, 92, 255, 0.9), rgba(236, 72, 153, 0.5) 40%, transparent 70%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+.studio > * { position: relative; z-index: 1; }
+.studio > .structure-pop { position: absolute; z-index: 25; }
+/* 输入框聚焦：边框流过一道光 */
+.studio .field-block input:focus, .studio .field-block textarea:focus, .studio .tag-input:focus-within {
+  border-color: transparent; box-shadow: 0 0 0 2px rgba(124, 92, 255, 0.55), 0 8px 22px -12px rgba(124, 92, 255, 0.7); background: rgba(255, 255, 255, 0.95); }
+/* 展开条目：内容从下往上浮出来 */
+.studio .item-card.open .form-grid, .studio .item-card.open .item-tips { animation: rise 0.38s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+/* 模块标签：悬停时轻轻上浮 */
+.module-pills button { transition: transform 0.18s, background 0.18s, box-shadow 0.18s, color 0.18s; }
+.module-pills button:hover:not(:disabled) { transform: translateY(-1px); }
+/* 模块标题下面有一条会随当前模块长出来的渐变线 */
+.editor-head { position: relative; padding-bottom: 6px; }
+.editor-head::after { content: ""; position: absolute; left: 0; bottom: 0; height: 2px; width: 32px; border-radius: 2px; background: linear-gradient(90deg, #2f4cdd, #7c5cff, #ec4899); transition: width 0.5s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.module-editor:hover .editor-head::after, .module-editor:focus-within .editor-head::after { width: 120px; }
+/* 添加按钮、日期面板等也带一点弹性 */
+.add-btn, .add-chip { transition: transform 0.15s; }
+.add-btn:hover:not(:disabled) { transform: translateX(2px); }
+.date-pop { animation: pop 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.3); }
+.field-label { font-size: 12px; color: var(--muted); }
+.app[data-skin="dark"] .studio { background: rgba(22, 26, 38, 0.5); }
+@media (prefers-reduced-motion: reduce) { .studio::before, .studio::after { display: none; } }

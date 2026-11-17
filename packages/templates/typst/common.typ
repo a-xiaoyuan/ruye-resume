@@ -308,16 +308,21 @@
   out
 }
 
-// 技术栈：强调色文字、细圆点分隔。打印比底色标签干净，也更省地方
-// 技术栈之间用顿号：中文的列举习惯；换行时落在行尾也自然，不会像圆点那样孤零零挂着
-#let tech-sep = text(fill: ink.lighten(45%))[、]
-// 分隔点并进前一项的盒子里：折行只会发生在点之后，新的一行不会以「·」开头
+// 技术栈：每项一个浅色小标签（主题浅底 + 细描边 + 深主色字），扫一眼就能抓到关键词。
+// 标签只往外扩（outset）不占行高，所以行距、分页和纯文字时一致；打印时浅底依然清晰。
+// 标签之间放零宽空格：只在两项之间折行，不会把一个技术名拆开
+#let tech-chip(s) = box(
+  fill: tint,
+  stroke: 0.4pt + accent.lighten(68%),
+  radius: 0.8mm,
+  inset: (x: 0.42em),
+  outset: (y: 0.2em),
+  text(fill: accent.darken(6%), weight: "medium")[#s],
+)
 #let tech-text(arr) = {
-  let n = arr.len()
-  // 技术栈用正文深灰而不是主色：主色只留给标题、岗位和要点圆点，一页上蓝色太多就看不出重点。
   // 用户常顺手在最后一项后面打句号，去掉
-  let clean = arr.map(s => s.trim().trim(regex("[。，、；;,.]+"), at: end))
-  text(size: meta-size, fill: ink.lighten(18%), clean.enumerate().map(((i, s)) => box[#s#if i < n - 1 { tech-sep }]).join(h(0pt)))
+  let clean = arr.map(s => s.trim().trim(regex("[。，、；;,.]+"), at: end)).filter(s => s != "")
+  text(size: meta-size, { h(0.12em); clean.map(tech-chip).join([#h(0.34em)#sym.zws]) })
 }
 
 // 条目标题下的一行：简介（灰）+ 技术栈（强调色）+ 链接（灰）。三者都可缺省，挤不下时自然折行

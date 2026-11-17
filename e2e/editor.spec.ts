@@ -64,11 +64,11 @@ test("Markdown 导出后再导入，内容不变", async ({ page }) => {
 });
 
 test("删除模块后可以撤销", async ({ page }) => {
-  await page.locator(".module-nav").getByRole("button", { name: /获奖情况/ }).first().click();
+  await page.locator(".module-pills").getByRole("button", { name: /获奖情况/ }).first().click();
   await page.getByRole("button", { name: "删除模块「获奖情况」" }).click();
   await expect(page.getByText("已删除模块「获奖情况」。")).toBeVisible();
   await page.locator(".toast").getByRole("button", { name: "撤销" }).click();
-  await expect(page.locator(".module-nav")).toContainText("获奖情况");
+  await expect(page.locator(".module-pills")).toContainText("获奖情况");
 });
 
 test("空白简历显示写作建议", async ({ page }) => {

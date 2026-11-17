@@ -32,6 +32,10 @@ export class LayoutService {
   async preview(doc: RuyeDocument, mode: PageMode = doc.layout.pageMode): Promise<PreviewData> {
     const template = this.template(doc);
     const result = await this.engine.layout(doc, template, mode);
+    // 版面标尺要知道每个模块占多高：装进一页时引擎没量过，这里补量一次（每个模块一次编译，约 100 ms）
+    if (result.status.startsWith("fitted") && result.metrics.moduleHeights.length === 0) {
+      await this.engine.attachBreakdown(doc, template, result.tokens, result.metrics, false);
+    }
     // 溢出时按内容实际高度渲染，让用户看见页外的部分，而不是假装没有
     const showAuto = result.status === "overflow";
     const height: PageHeight = showAuto ? "auto" : result.pageHeight;

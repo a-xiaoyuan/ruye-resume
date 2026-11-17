@@ -1,6 +1,6 @@
 // 中栏：当前模块的表单
 import { useEffect, useState } from "react";
-import { lintDocument, MODULE_LABELS, newId, type LintIssue, type Module, type RuyeDocument, type SkillCategory } from "../../../../packages/schema/src/index.ts";
+import { ageFrom, lintDocument, MODULE_LABELS, newId, type LintIssue, type Module, type RuyeDocument, type SkillCategory } from "../../../../packages/schema/src/index.ts";
 import { addItem, itemTitle, moveItem, removeItem, replaceModule, updateItem, type ListItem, type ListModule } from "../doc-ops.ts";
 import { Icon } from "./icons.tsx";
 import { BulletList, ChoiceField, PhotoField, TagInput, TextArea, TextField } from "./fields.tsx";
@@ -84,6 +84,23 @@ export function ModuleEditor({ doc, module: m, onChange, onRemove, onError, onRe
           <TextField label="博客" value={m.data.blog} onChange={(v) => patchData({ blog: v })} />
           <ChoiceField label="性别（可选）" value={m.data.gender} onChange={(v) => patchData({ gender: v })} options={["男", "女"]} />
           <MonthPicker label="出生年月（可选）" value={m.data.birthday} onChange={(v) => patchData({ birthday: v })} related={`${new Date().getFullYear() - 21}-01`} />
+          {m.data.birthday && (
+            <div className="field-block">
+              <span className="field-label">简历上显示为</span>
+              <div className="seg" role="radiogroup" aria-label="出生年月在简历上显示为">
+                {(
+                  [
+                    ["date", "出生年月"],
+                    ["age", ageFrom(m.data.birthday) !== null ? `年龄（${ageFrom(m.data.birthday)} 岁）` : "年龄"],
+                  ] as const
+                ).map(([k, label]) => (
+                  <button key={k} type="button" role="radio" aria-checked={(m.data.birthdayAs ?? "date") === k} className={(m.data.birthdayAs ?? "date") === k ? "on" : ""} onClick={() => patchData({ birthdayAs: k })}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <PhotoField value={m.data.photoDataUrl} onChange={(v) => patchData({ photoDataUrl: v })} onError={onError} />
         </div>
       )}

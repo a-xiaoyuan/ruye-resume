@@ -1,6 +1,8 @@
 // 右栏：A4 预览。SVG 来自和导出 PDF 同一个排版器、同一份输入
 import { A4_HEIGHT_MM, describeFit } from "../../../../packages/engine/src/index.ts";
+import { MODULE_LABELS, type ModuleType } from "../../../../packages/schema/src/index.ts";
 
+import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { Icon } from "./icons.tsx";
 
 export type { PreviewData } from "../layout-service.ts";
@@ -13,16 +15,52 @@ interface Props {
   zoom: number;
   onZoom: (z: number) => void;
   onCollapse?: () => void;
+  /** 点版面标尺上的一段，跳到编辑区对应的模块 */
+  onJump?: (moduleId: string) => void;
+  /** 文档里模块的先后顺序 */
+  order?: string[];
 }
 
-export function Preview({ data, error, busy, zoom, onZoom, onCollapse }: Props) {
+export function Preview({ data, error, busy, zoom, onZoom, onCollapse, onJump, order }: Props) {
   const r = data?.result;
   const fit = r ? describeFit(r) : null;
+
+  // 每次重新排版，纸面上扫过一道光；从「装不下」变成「装进一页」时，状态条迸出一圈光点
+  const [sweep, setSweep] = useState(0);
+  const [burst, setBurst] = useState(0);
+  const lastLevel = useRef<string | null>(null);
+  useEffect(() => {
+    if (!data) return;
+    setSweep((x) => x + 1);
+    const level = fit?.level ?? null;
+    if (level === "ok" && lastLevel.current !== null && lastLevel.current !== "ok") setBurst((x) => x + 1);
+    lastLevel.current = level;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
+  // 纸跟着鼠标微微倾斜（最多 3°）
+  const board = useRef<HTMLDivElement>(null);
+  const tilt = (e: PointerEvent<HTMLDivElement>) => {
+    const el = board.current;
+    if (!el) return;
+    const b = el.getBoundingClientRect();
+    const x = (e.clientX - b.left) / b.width - 0.5;
+    const y = (e.clientY - b.top) / Math.min(b.height, window.innerHeight) - 0.5;
+    el.style.setProperty("--ry", `${(x * 4).toFixed(2)}deg`);
+    el.style.setProperty("--rx", `${(-y * 3).toFixed(2)}deg`);
+    el.style.setProperty("--gx", `${((x + 0.5) * 100).toFixed(1)}%`);
+    el.style.setProperty("--gy", `${((e.clientY - b.top) / b.height) * 100}%`);
+  };
+  const untilt = () => {
+    board.current?.style.setProperty("--ry", "0deg");
+    board.current?.style.setProperty("--rx", "0deg");
+  };
 
   return (
     <div className="preview-inner">
       <div className="preview-toolbar">
         <span className={`fit-pill ${error ? "error" : (fit?.level ?? "")}`} aria-live="polite" title={fit?.text}>
+          {burst > 0 && <Sparks key={burst} />}
           <i aria-hidden="true" />
           {error ? "排版引擎加载失败" : fit ? fit.short : "正在加载排版引擎…"}
         </span>
@@ -71,8 +109,10 @@ export function Preview({ data, error, busy, zoom, onZoom, onCollapse }: Props) 
               </ul>
             </div>
           )}
-          <div className="board-wrap">
-            <div className="board" style={{ aspectRatio: `210 / ${data.boardMm}`, width: `${zoom * 100}%` }}>
+          <div className="board-wrap" onPointerMove={tilt} onPointerLeave={untilt}>
+            <div className="board" ref={board} style={{ aspectRatio: `210 / ${data.boardMm}`, width: `${zoom * 100}%` }}>
+              <span key={sweep} className="scan" aria-hidden="true" />
+              <span className="sheen" aria-hidden="true" />
               {/* 四角裁切标记：提醒这是一张真实尺寸的纸，导出的 PDF 与它完全一致 */}
               <span className="crop tl" aria-hidden="true" />
               <span className="crop tr" aria-hidden="true" />
@@ -84,6 +124,7 @@ export function Preview({ data, error, busy, zoom, onZoom, onCollapse }: Props) 
                 </span>
               )}
               <div className="svg" dangerouslySetInnerHTML={{ __html: data.svg }} />
+              {(r.status.startsWith("fitted") || r.status === "overflow") && <PageMeter result={r} boardMm={data.boardMm} order={order ?? []} onJump={onJump} />}
               {r.status === "overflow" && (
                 <div className="overflow-zone" style={{ top: `${(A4_HEIGHT_MM / data.boardMm) * 100}%` }}>
                   <span>A4 底边 · 以下超出约 {Math.round(r.metrics.overflowMm)}mm</span>
@@ -106,5 +147,61 @@ export function Preview({ data, error, busy, zoom, onZoom, onCollapse }: Props) 
         </>
       )}
     </div>
+  );
+}
+
+type Result = NonNullable<PreviewData["result"]>;
+
+/**
+ * 版面标尺：贴在纸的右边，把 297 mm 按模块切成几段——每个模块占了多少版面一眼可见，
+ * 想压到一页时先砍哪里也就清楚了。点一段跳到那个模块。
+ * 位置按各模块高度从下边距往上倒推，和纸面上的位置大致对齐，不是逐像素对齐。
+ */
+function PageMeter({ result, boardMm, order, onJump }: { result: Result; boardMm: number; order: string[]; onJump?: (id: string) => void }) {
+  // 引擎按大小排序（给精简建议用）；标尺要按纸上的先后顺序
+  const mods = result.metrics.moduleHeights.filter((m) => m.heightMm > 0.5).sort((a, b) => order.indexOf(a.moduleId) - order.indexOf(b.moduleId));
+  if (!mods.length) return null;
+  const sum = mods.reduce((a, m) => a + m.heightMm, 0);
+  // 姓名页眉不参与测量：从下边距往上倒推各模块的起点
+  let y = Math.max(0, result.metrics.contentHeightMm - result.tokens.pageMarginMm.bottom - sum);
+  const pct = (mm: number) => `${(mm / boardMm) * 100}%`;
+  return (
+    <div className="page-meter" aria-label="各模块占用的版面" style={{ ["--board-mm" as string]: boardMm }}>
+      {mods.map((m, i) => {
+        const top = y;
+        y += m.heightMm;
+        const label = MODULE_LABELS[m.type as ModuleType] ?? m.type;
+        const over = top + m.heightMm > A4_HEIGHT_MM + 0.5;
+        return (
+          <button
+            key={m.moduleId}
+            type="button"
+            className={`meter-seg c${i % 6}${over ? " over" : ""}`}
+            style={{ top: pct(top), height: pct(m.heightMm) }}
+            title={`${label}：约 ${Math.round(m.heightMm)} mm，占一页的 ${Math.round((m.heightMm / A4_HEIGHT_MM) * 100)}%`}
+            aria-label={`${label}，约 ${Math.round(m.heightMm)} 毫米，跳到这里编辑`}
+            onClick={() => onJump?.(m.moduleId)}
+          >
+            {m.heightMm >= 14 && (
+              <span>
+                {label}
+                <em>{Math.round(m.heightMm)} mm</em>
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 一圈向外飞散的光点（纯 CSS 动画，播一次） */
+function Sparks() {
+  return (
+    <span className="sparks" aria-hidden="true">
+      {Array.from({ length: 14 }, (_, i) => (
+        <i key={i} style={{ ["--a" as string]: `${(360 / 14) * i}deg`, ["--d" as string]: `${26 + (i % 3) * 12}px`, ["--h" as string]: `${(i * 47) % 360}` }} />
+      ))}
+    </span>
   );
 }

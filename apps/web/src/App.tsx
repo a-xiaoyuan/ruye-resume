@@ -20,12 +20,13 @@ import { AccountMenu, useCloudSync } from "./components/AccountMenu.tsx";
 import { SAMPLES } from "./samples.ts";
 import { parseImport } from "./import-file.ts";
 import { Logo, Menu } from "./components/Menu.tsx";
-import { Sidebar } from "./components/Sidebar.tsx";
+import { ModulePills, Sidebar } from "./components/Sidebar.tsx";
 import { Icon } from "./components/icons.tsx";
 import { AppearanceMenu } from "./components/AppearanceMenu.tsx";
 import { OverflowDialog } from "./components/OverflowDialog.tsx";
 import { loadSkin, saveSkin, type Skin } from "./skin.ts";
 import { Library } from "./components/Library.tsx";
+import { Backdrop } from "./components/Backdrop.tsx";
 import { HistoryDialog } from "./components/HistoryDialog.tsx";
 import { moveToTrash, recordSnapshot } from "./history.ts";
 import { contentHash } from "./sync.ts";
@@ -71,6 +72,8 @@ export function App() {
   const [view, setView] = useState<"editor" | "library">("editor");
   const [historyFor, setHistoryFor] = useState<string | null>(null);
   const [loginSignal, setLoginSignal] = useState(0);
+  // 「调整结构」弹层：排序、显隐、添加模块
+  const [managing, setManaging] = useState(false);
   const [zoom, setZoom] = useState(1);
   const fileInput = useRef<HTMLInputElement>(null);
   const [skin, setSkinState] = useState<Skin>(loadSkin);
@@ -421,6 +424,22 @@ export function App() {
     return () => window.removeEventListener("keydown", on);
   }, []);
 
+  // 「调整结构」弹层：点外面或按 Esc 关闭
+  useEffect(() => {
+    if (!managing) return;
+    const close = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (!t.closest(".structure-pop") && !t.closest(".module-pills .manage")) setManaging(false);
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setManaging(false);
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [managing]);
+
   // 滚动时高亮大纲里当前所在的模块：取顶部越过编辑区上沿（留 96px）的最后一个模块
   useEffect(() => {
     const el = editorRef.current;
@@ -494,6 +513,7 @@ export function App() {
 
   return (
     <div className={`app${previewOpen ? "" : " preview-collapsed"}`} data-skin={skin}>
+      <Backdrop />
       <header className="topbar">
         <div className="brand">
           <Logo />
@@ -637,10 +657,25 @@ export function App() {
           onClose={() => setView("editor")}
         />
       ) : (
-      <main className="panes">
-        <Sidebar doc={doc} activeId={activeId} onSelect={jumpTo} onChange={update} onAdd={addNewModule} />
-
-        <section className="editor" aria-label="编辑" ref={editorRef}>
+      <main className="stage">
+        {/* 写作面板：浮在画布左侧。顶部是模块标签，下面整篇连着写 */}
+        <aside
+          className="studio"
+          aria-label="编辑"
+          onPointerMove={(e) => {
+            // 写作面板里跟着鼠标的一团柔光
+            const r = e.currentTarget.getBoundingClientRect();
+            e.currentTarget.style.setProperty("--mx", `${e.clientX - r.left}px`);
+            e.currentTarget.style.setProperty("--my", `${e.clientY - r.top}px`);
+          }}
+        >
+          <ModulePills doc={doc} activeId={activeId} onSelect={(id) => (setManaging(false), jumpTo(id))} managing={managing} onManage={() => setManaging((x) => !x)} />
+          {managing && (
+            <div className="structure-pop" role="dialog" aria-label="调整简历结构">
+              <Sidebar doc={doc} activeId={activeId} onSelect={(id) => (setManaging(false), jumpTo(id))} onChange={update} onAdd={(t) => (setManaging(false), addNewModule(t))} />
+            </div>
+          )}
+        <section className="editor" ref={editorRef}>
           <div className="doc-editor">
             {issues.length > 0 && (
               <ul className="problems" aria-label="需要修正的内容">
@@ -670,10 +705,11 @@ export function App() {
             )}
           </div>
         </section>
+        </aside>
 
         {previewOpen ? (
         <section className="preview" aria-label="A4 预览">
-          <Preview data={preview} error={fatal} busy={busy} zoom={zoom} onZoom={setZoom} onCollapse={() => togglePreview(false)} />
+          <Preview data={preview} error={fatal} busy={busy} zoom={zoom} onZoom={setZoom} onCollapse={() => togglePreview(false)} onJump={jumpTo} order={doc.modules.map((m) => m.id)} />
         </section>
         ) : (
           <button type="button" className="preview-rail" onClick={() => togglePreview(true)} aria-label="展开 A4 预览">

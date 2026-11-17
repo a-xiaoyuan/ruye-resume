@@ -133,6 +133,7 @@ function checkModuleData(ctx: Ctx, type: ModuleType, data: Record<string, unknow
         optString(ctx, data, k, p);
       }
       for (const k of ["website", "github", "blog"]) urlField(ctx, data, k, p);
+      if (data.birthdayAs !== undefined && data.birthdayAs !== "date" && data.birthdayAs !== "age") ctx.fail(`${p}.birthdayAs`, "只能是 date 或 age");
       if (typeof data.photoDataUrl === "string" && data.photoDataUrl !== "" && !data.photoDataUrl.startsWith("data:image/")) {
         ctx.fail(`${p}.photoDataUrl`, "照片只支持本地 data URL（data:image/...）");
       }
@@ -332,6 +333,7 @@ function isRecoverableModule(m: unknown): boolean {
       return (
         isText(d.name) &&
         ["photoDataUrl", "gender", "birthday", "phone", "email", "location", "website", "github", "blog"].every((k) => isText(d[k])) &&
+        (d.birthdayAs === undefined || d.birthdayAs === "date" || d.birthdayAs === "age") &&
         isLinkList(d.customLinks)
       );
     case "job_intention":
@@ -393,8 +395,23 @@ export function isModuleEmpty(m: Module): boolean {
 }
 
 /** 实际参与排版的模块：可见且非空，保持原顺序 */
-export function renderableModules(doc: RuyeDocument): Module[] {
-  return doc.modules.filter((m) => m.visible && !isModuleEmpty(m));
+export function renderableModules(doc: RuyeDocument, today = new Date()): Module[] {
+  return doc.modules
+    .filter((m) => m.visible && !isModuleEmpty(m))
+    .map((m) => {
+      // 选了「显示年龄」：排版前把出生年月换成「19 岁」，模板不用知道今天是哪天
+      if (m.type !== "basic_info" || m.data.birthdayAs !== "age") return m;
+      const age = ageFrom(m.data.birthday, today);
+      return age === null ? m : { ...m, data: { ...m.data, birthday: `${age} 岁` } };
+    });
+}
+
+/** 由 YYYY-MM 算周岁；没填或格式不对返回 null */
+export function ageFrom(birthday: string | undefined, today = new Date()): number | null {
+  const m = /^(\d{4})-(\d{2})/.exec(birthday ?? "");
+  if (!m) return null;
+  const months = (today.getFullYear() - Number(m[1])) * 12 + (today.getMonth() + 1 - Number(m[2]));
+  return months < 0 ? null : Math.floor(months / 12);
 }
 
 export function getBasicInfo(doc: RuyeDocument) {

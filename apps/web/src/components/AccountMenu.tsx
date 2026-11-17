@@ -179,9 +179,9 @@ export function AccountMenu({ cloud, loginSignal = 0 }: { cloud: Cloud; /** 每�
   if (!cloud.session) {
     return (
       <>
-        <button type="button" className="account-btn" onClick={() => setDialog("login")}>
+        <button type="button" className="account-btn" aria-label="登录同步" onClick={() => setDialog("login")}>
           <Icon name="cloud" size={15} />
-          登录同步
+          <span className="btn-text">登录同步</span>
         </button>
         {dialog === "login" && <LoginDialog onClose={() => setDialog(null)} onSubmit={cloud.signIn} />}
         {resetDialog}
@@ -196,10 +196,10 @@ export function AccountMenu({ cloud, loginSignal = 0 }: { cloud: Cloud; /** 每�
   };
   return (
     <div className="menu account" ref={ref}>
-      <button type="button" className={`account-btn signed-in ${phase}`} aria-expanded={open} onClick={() => setOpen((x) => !x)} title={text}>
+      <button type="button" className={`account-btn signed-in ${phase}`} aria-expanded={open} aria-label={text || "云同步"} onClick={() => setOpen((x) => !x)} title={text}>
         <Icon name="cloud" size={15} />
         <span className="sync-dot" aria-hidden="true" />
-        {phase === "syncing" ? "同步中" : phase === "error" ? "同步出错" : "已同步"}
+        <span className="btn-text">{phase === "syncing" ? "同步中" : phase === "error" ? "同步出错" : "已同步"}</span>
       </button>
       {open && (
         <div className="menu-list right account-pop" role="menu">

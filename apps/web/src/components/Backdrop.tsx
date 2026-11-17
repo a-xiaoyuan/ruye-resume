@@ -11,7 +11,8 @@ interface Dot {
   c: number;
 }
 
-const COLORS = ["47, 76, 221", "124, 92, 255", "236, 72, 153", "20, 184, 166"];
+// 群青、天蓝、青绿：和界面主色同一家族，不用紫色
+const COLORS = ["47, 76, 221", "29, 143, 214", "20, 184, 166"];
 const LINK = 130;
 
 export function Backdrop() {
@@ -37,7 +38,7 @@ export function Backdrop() {
       canvas.style.width = `${w}px`;
       canvas.style.height = `${h}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const n = Math.round(Math.min(90, (w * h) / 16000));
+      const n = Math.round(Math.min(44, (w * h) / 32000));
       dots = Array.from({ length: n }, () => ({
         x: Math.random() * w,
         y: Math.random() * h,

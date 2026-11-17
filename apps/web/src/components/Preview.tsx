@@ -38,22 +38,14 @@ export function Preview({ data, error, busy, zoom, onZoom, onCollapse, onJump, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
-  // 纸跟着鼠标微微倾斜（最多 3°）
+  // 纸面上的高光跟着鼠标移动（纸本身不动，不倾斜）
   const board = useRef<HTMLDivElement>(null);
-  const tilt = (e: PointerEvent<HTMLDivElement>) => {
+  const light = (e: PointerEvent<HTMLDivElement>) => {
     const el = board.current;
     if (!el) return;
     const b = el.getBoundingClientRect();
-    const x = (e.clientX - b.left) / b.width - 0.5;
-    const y = (e.clientY - b.top) / Math.min(b.height, window.innerHeight) - 0.5;
-    el.style.setProperty("--ry", `${(x * 4).toFixed(2)}deg`);
-    el.style.setProperty("--rx", `${(-y * 3).toFixed(2)}deg`);
-    el.style.setProperty("--gx", `${((x + 0.5) * 100).toFixed(1)}%`);
-    el.style.setProperty("--gy", `${((e.clientY - b.top) / b.height) * 100}%`);
-  };
-  const untilt = () => {
-    board.current?.style.setProperty("--ry", "0deg");
-    board.current?.style.setProperty("--rx", "0deg");
+    el.style.setProperty("--gx", `${(((e.clientX - b.left) / b.width) * 100).toFixed(1)}%`);
+    el.style.setProperty("--gy", `${(((e.clientY - b.top) / b.height) * 100).toFixed(1)}%`);
   };
 
   return (
@@ -109,7 +101,7 @@ export function Preview({ data, error, busy, zoom, onZoom, onCollapse, onJump, o
               </ul>
             </div>
           )}
-          <div className="board-wrap" onPointerMove={tilt} onPointerLeave={untilt}>
+          <div className="board-wrap" onPointerMove={light}>
             <div className="board" ref={board} style={{ aspectRatio: `210 / ${data.boardMm}`, width: `${zoom * 100}%` }}>
               <span key={sweep} className="scan" aria-hidden="true" />
               <span className="sheen" aria-hidden="true" />
@@ -200,7 +192,7 @@ function Sparks() {
   return (
     <span className="sparks" aria-hidden="true">
       {Array.from({ length: 14 }, (_, i) => (
-        <i key={i} style={{ ["--a" as string]: `${(360 / 14) * i}deg`, ["--d" as string]: `${26 + (i % 3) * 12}px`, ["--h" as string]: `${(i * 47) % 360}` }} />
+        <i key={i} style={{ ["--a" as string]: `${(360 / 14) * i}deg`, ["--d" as string]: `${26 + (i % 3) * 12}px`, ["--h" as string]: `${[214, 196, 172, 150, 42][i % 5]}` }} />
       ))}
     </span>
   );

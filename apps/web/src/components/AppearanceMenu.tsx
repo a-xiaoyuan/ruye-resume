@@ -22,7 +22,7 @@ export function AppearanceMenu({ doc, onChange, skin, onSkin }: { doc: RuyeDocum
   }, [open]);
   return (
     <div className="menu appearance" ref={ref}>
-      <button type="button" className="menu-trigger appearance-trigger" aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen((x) => !x)}>
+      <button type="button" className="menu-trigger appearance-trigger" aria-label="外观：模板、主题色、页面模式" aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen((x) => !x)}>
         <Icon name="palette" size={15} />
         <span className="appearance-label">外观</span>
         <span className="appearance-current">{templateMeta(doc.layout.templateId).name}</span>

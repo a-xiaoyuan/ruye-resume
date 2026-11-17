@@ -513,6 +513,11 @@ export function App() {
 
   return (
     <div className={`app${previewOpen ? "" : " preview-collapsed"}`} data-skin={skin}>
+      {view === "editor" && (
+        <a className="skip-link" href="#editor-main">
+          跳到编辑区
+        </a>
+      )}
       <Backdrop />
       <header className="topbar">
         <div className="brand">
@@ -563,11 +568,11 @@ export function App() {
             ]}
           />
           <input ref={fileInput} type="file" accept=".json,.md,.txt" hidden onChange={(e) => (e.target.files?.[0] && importFile(e.target.files[0]), (e.target.value = ""))} />
-          <button className="primary" disabled={!engineReady || exporting} onClick={() => exportPdf()}>
+          <button className="primary" aria-label="下载 PDF" disabled={!engineReady || exporting} onClick={() => exportPdf()}>
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path d="M8 2v8m0 0L5 7m3 3 3-3M3 12.5h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            下载 PDF
+            <span className="btn-text">下载</span> PDF
           </button>
         </div>
       </header>
@@ -675,7 +680,7 @@ export function App() {
               <Sidebar doc={doc} activeId={activeId} onSelect={(id) => (setManaging(false), jumpTo(id))} onChange={update} onAdd={(t) => (setManaging(false), addNewModule(t))} />
             </div>
           )}
-        <section className="editor" ref={editorRef}>
+        <section className="editor" id="editor-main" tabIndex={-1} aria-label="编辑区" ref={editorRef}>
           <div className="doc-editor">
             {issues.length > 0 && (
               <ul className="problems" aria-label="需要修正的内容">

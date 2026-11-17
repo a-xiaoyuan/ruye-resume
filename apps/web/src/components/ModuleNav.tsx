@@ -3,7 +3,6 @@ import { useState } from "react";
 import { MODULE_LABELS, type ModuleType, type RuyeDocument } from "../../../../packages/schema/src/index.ts";
 import { missingTypes, moduleSummary, moveModule, moveModuleTo, toggleModule } from "../doc-ops.ts";
 import { Icon } from "./icons.tsx";
-import { MODULE_FILES } from "../skin.ts";
 
 interface Props {
   doc: RuyeDocument;
@@ -59,9 +58,6 @@ export function ModuleNav({ doc, activeId, onSelect, onChange, onAdd, onSortReco
             </span>
             <button type="button" className="module-btn" aria-current={m.id === activeId} onClick={() => onSelect(m.id)}>
               <span className="module-name">{MODULE_LABELS[m.type]}</span>
-              <span className="module-file" aria-hidden="true">
-                {MODULE_FILES[m.type]}
-              </span>
               <span className="module-sub">{moduleSummary(m)}</span>
             </button>
             <div className="nav-actions">

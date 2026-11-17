@@ -123,3 +123,30 @@ test("撤销与重做：删除条目后 Ctrl+Z 找回，Ctrl+Shift+Z 再删掉",
   await page.keyboard.press("Control+Shift+z");
   await expect(award.locator(".item-card")).toHaveCount(before - 1);
 });
+
+test("日期点选：选开始后自动打开结束，可选「至今」", async ({ page }) => {
+  const project = page.locator("[data-module]").filter({ has: page.getByRole("heading", { name: "项目经历" }) });
+  await project.locator(".item-toggle").first().click();
+  const card = project.locator(".item-card.open");
+  // 结束日期空着时，选完开始才会自动打开结束
+  await card.getByRole("button", { name: "清除结束" }).click();
+  await card.getByRole("button", { name: /^开始：/ }).click();
+  await card.getByRole("button", { name: "选择年份" }).click();
+  await card.getByRole("button", { name: "2023", exact: true }).click();
+  await card.getByRole("button", { name: "2023 年 3 月" }).click();
+  await expect(card.getByRole("button", { name: /^开始：/ })).toHaveAccessibleName("开始：2023 年 3 月");
+  // 结束日期自动打开
+  await expect(card.getByRole("dialog", { name: "选择结束" })).toBeVisible();
+  await card.getByRole("dialog", { name: "选择结束" }).getByRole("button", { name: "至今" }).click();
+  await expect(card.getByRole("button", { name: /^结束：/ })).toHaveAccessibleName("结束：至今");
+});
+
+test("常用选项：点一下填入学历", async ({ page }) => {
+  const edu = page.locator("[data-module]").filter({ has: page.getByRole("heading", { name: "教育背景" }) });
+  const toggle = edu.locator(".item-toggle").first();
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+  const degree = edu.getByLabel("学历", { exact: true });
+  await degree.fill("");
+  await edu.getByRole("group", { name: "学历常用选项" }).getByRole("button", { name: "硕士" }).click();
+  await expect(degree).toHaveValue("硕士");
+});

@@ -1,6 +1,5 @@
-// 表单基础控件：文本、多行、日期、标签输入、要点列表、照片
+// 表单基础控件：文本、带常用选项的文本、多行、标签输入、要点列表、照片（日期见 DatePicker.tsx）
 import { useEffect, useId, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
-import { isValidDate, normalizeDate, PRESENT } from "../../../../packages/schema/src/index.ts";
 import { splitPastedLines } from "../paste.ts";
 
 interface FieldProps {
@@ -59,48 +58,35 @@ export function TextArea({ label, value, onChange, placeholder }: FieldProps) {
   );
 }
 
-/** 日期：输入 2024-09、2024.09、2024年9月 都行，离开输入框时归一化；可勾选「至今」 */
-export function DateField({ label, value, onChange, allowPresent }: { label: string; value: string | undefined; onChange: (v: string) => void; allowPresent?: boolean }) {
+/** 文本框 + 常用选项：点一下就填上，也可以自己写。选项只在空着或正在编辑时出现 */
+export function ChoiceField({ label, value, onChange, options, placeholder, wide }: FieldProps & { options: string[] }) {
   const id = useId();
+  const [focus, setFocus] = useState(false);
   const v = value ?? "";
-  const [draft, setDraft] = useState(v);
-  useEffect(() => setDraft(v), [v]);
-  const present = v === PRESENT;
-  const invalid = draft !== "" && !isValidDate(normalizeDate(draft));
+  const show = focus || v.trim() === "";
   return (
-    <div className="field-block">
+    <div className={`field-block${wide ? " wide" : ""}`} onFocus={() => setFocus(true)} onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setFocus(false)}>
       <label htmlFor={id}>{label}</label>
-      <div className="date-row">
-        <input
-          id={id}
-          value={present ? "" : draft}
-          disabled={present}
-          placeholder={present ? "至今" : "2024-09"}
-          aria-invalid={invalid}
-          className={invalid ? "invalid" : ""}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={(e) => {
-            const next = normalizeDate(e.currentTarget.value);
-            setDraft(next);
-            onChange(next);
-          }}
-        />
-        {allowPresent && (
-          <label className="check">
-            <input type="checkbox" checked={present} onChange={(e) => onChange(e.target.checked ? PRESENT : "")} />
-            至今
-          </label>
-        )}
-      </div>
-      {invalid && <div className="hint error">格式应为 2024-09</div>}
+      <input id={id} value={v} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+      {show && (
+        <div className="quick-picks" role="group" aria-label={`${label}常用选项`}>
+          {options.map((o) => (
+            <button key={o} type="button" aria-pressed={v === o} onMouseDown={(e) => e.preventDefault()} onClick={() => onChange(o)}>
+              {o}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
 /** 标签输入：回车或逗号完成一个；退格删除最后一个；粘贴「Java、Spring Boot、MySQL」直接拆成多个 */
-export function TagInput({ label, value, onChange, placeholder }: { label: string; value: string[] | undefined; onChange: (v: string[]) => void; placeholder?: string }) {
+export function TagInput({ label, value, onChange, placeholder, suggest = [] }: { label: string; value: string[] | undefined; onChange: (v: string[]) => void; placeholder?: string; /** 这份简历别处写过的，点一下加入 */ suggest?: string[] }) {
   const id = useId();
   const tags = value ?? [];
+  const [focus, setFocus] = useState(false);
+  const more = suggest.filter((t) => !tags.includes(t)).slice(0, 10);
   const [draft, setDraft] = useState("");
   const commit = (raw: string) => {
     const parts = raw.split(/[,，、;；]/).map((s) => s.trim()).filter(Boolean);
@@ -108,7 +94,7 @@ export function TagInput({ label, value, onChange, placeholder }: { label: strin
     setDraft("");
   };
   return (
-    <div className="field-block wide">
+    <div className="field-block wide" onFocus={() => setFocus(true)} onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setFocus(false)}>
       <label htmlFor={id}>{label}</label>
       <div className="tag-input" onClick={() => document.getElementById(id)?.focus()}>
         {tags.map((t, i) => (
@@ -145,6 +131,16 @@ export function TagInput({ label, value, onChange, placeholder }: { label: strin
           onBlur={() => draft.trim() && commit(draft)}
         />
       </div>
+      {focus && more.length > 0 && (
+        <div className="quick-picks" role="group" aria-label="这份简历里写过的技术">
+          <span className="quick-label">写过的：</span>
+          {more.map((t) => (
+            <button key={t} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => onChange([...tags, t])}>
+              ＋ {t}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

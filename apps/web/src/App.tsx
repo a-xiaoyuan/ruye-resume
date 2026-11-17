@@ -3,7 +3,6 @@ import {
   checkExportable,
   createEmptyDocument,
   exportBaseName,
-  lintDocument,
   MODULE_LABELS,
   toMarkdown,
   validateDocument,
@@ -25,9 +24,7 @@ import { Sidebar } from "./components/Sidebar.tsx";
 import { Icon } from "./components/icons.tsx";
 import { AppearanceMenu } from "./components/AppearanceMenu.tsx";
 import { OverflowDialog } from "./components/OverflowDialog.tsx";
-import { StatusBar } from "./components/StatusBar.tsx";
-import { loadSkin, MODULE_FILES, saveSkin, type Skin } from "./skin.ts";
-import { templateMeta } from "../../../packages/templates/src/index.ts";
+import { loadSkin, saveSkin, type Skin } from "./skin.ts";
 import { Library } from "./components/Library.tsx";
 import { HistoryDialog } from "./components/HistoryDialog.tsx";
 import { moveToTrash, recordSnapshot } from "./history.ts";
@@ -93,10 +90,6 @@ export function App() {
       /* 存不了就只在这次生效 */
     }
   };
-  // 浅色：整篇连着写；深色终端：一次打开一个模块
-  const single = skin === "terminal";
-  const shownId = doc.modules.some((m) => m.id === activeId) ? activeId : (doc.modules[0]?.id ?? null);
-  const shownIndex = doc.modules.findIndex((m) => m.id === shownId);
   const setSkin = (s: Skin) => {
     setSkinState(s);
     saveSkin(s);
@@ -104,8 +97,6 @@ export function App() {
   const editorRef = useRef<HTMLElement>(null);
   // 点大纲时正在平滑滚动：这段时间不让滚动监听改写高亮
   const jumping = useRef(0);
-  // 终端皮肤的「已打开的文件」标签
-  const [openTabs, setOpenTabs] = useState<string[]>([]);
 
   const issues = useMemo(() => {
     const v = validateDocument(doc);
@@ -398,7 +389,6 @@ export function App() {
   /** 大纲点一项：滚到中间对应的模块 */
   function jumpTo(id: string) {
     setActiveId(id);
-    setOpenTabs((t) => (t.includes(id) ? t : [...t, id].slice(-5)));
     jumping.current = Date.now();
     requestAnimationFrame(() => document.getElementById(`module-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
   }
@@ -506,11 +496,6 @@ export function App() {
     <div className={`app${previewOpen ? "" : " preview-collapsed"}`} data-skin={skin}>
       <header className="topbar">
         <div className="brand">
-          <span className="win-dots" aria-hidden="true">
-            <i />
-            <i />
-            <i />
-          </span>
           <Logo />
           <span className="brand-name">
             如页<em>Ruye</em>
@@ -656,33 +641,6 @@ export function App() {
         <Sidebar doc={doc} activeId={activeId} onSelect={jumpTo} onChange={update} onAdd={addNewModule} />
 
         <section className="editor" aria-label="编辑" ref={editorRef}>
-          {skin === "terminal" && (
-            <div className="file-tabs" role="tablist" aria-label="已打开的模块">
-              {openTabs
-                .map((id) => doc.modules.find((m) => m.id === id))
-                .filter((m): m is NonNullable<typeof m> => !!m)
-                .concat(doc.modules.filter((m) => m.id === shownId && !openTabs.includes(m.id)))
-                .map((m) => (
-                  <span key={m.id} className={`file-tab${m.id === shownId ? " on" : ""}`} role="tab" aria-selected={m.id === shownId}>
-                    <button type="button" onClick={() => jumpTo(m.id)}>
-                      {MODULE_FILES[m.type]}
-                    </button>
-                    <button
-                      type="button"
-                      className="file-tab-close"
-                      aria-label={`关闭 ${MODULE_FILES[m.type]}`}
-                      onClick={() => {
-                        const rest = openTabs.filter((x) => x !== m.id);
-                        setOpenTabs(rest);
-                        if (m.id === shownId && rest.length) setActiveId(rest[rest.length - 1]);
-                      }}
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-            </div>
-          )}
           <div className="doc-editor">
             {issues.length > 0 && (
               <ul className="problems" aria-label="需要修正的内容">
@@ -693,7 +651,7 @@ export function App() {
                 ))}
               </ul>
             )}
-            {(single ? doc.modules.filter((m) => m.id === shownId) : doc.modules).map((m) => (
+            {doc.modules.map((m) => (
               <ModuleEditor
                 key={m.id}
                 doc={doc}
@@ -701,33 +659,9 @@ export function App() {
                 onChange={update}
                 onRemove={remove}
                 onError={(text) => setNotice({ text, level: "error" })}
-                onRemoveModule={() => {
-                  const i = doc.modules.findIndex((x) => x.id === m.id);
-                  const next = doc.modules[i + 1] ?? doc.modules[i - 1];
-                  remove(removeModule(doc, m.id), `模块「${MODULE_LABELS[m.type]}」`);
-                  if (single && next) setActiveId(next.id);
-                  setOpenTabs((t) => t.filter((x) => x !== m.id));
-                }}
+                onRemoveModule={() => remove(removeModule(doc, m.id), `模块「${MODULE_LABELS[m.type]}」`)}
               />
             ))}
-            {single && shownIndex >= 0 && (
-              <nav className="module-pager" aria-label="上一个、下一个模块">
-                {shownIndex > 0 ? (
-                  <button type="button" onClick={() => jumpTo(doc.modules[shownIndex - 1].id)}>
-                    <span>上一节</span>
-                    {MODULE_LABELS[doc.modules[shownIndex - 1].type]}
-                  </button>
-                ) : (
-                  <i />
-                )}
-                {shownIndex < doc.modules.length - 1 && (
-                  <button type="button" className="next" onClick={() => jumpTo(doc.modules[shownIndex + 1].id)}>
-                    <span>下一节</span>
-                    {MODULE_LABELS[doc.modules[shownIndex + 1].type]}
-                  </button>
-                )}
-              </nav>
-            )}
             {doc.modules.length === 0 && (
               <div className="empty">
                 <p>这份简历还没有任何模块。</p>
@@ -750,19 +684,6 @@ export function App() {
         )}
       </main>
       )}
-
-      {view === "editor" && <StatusBar
-        items={[
-          "markdown · utf-8",
-          templateMeta(doc.layout.templateId).name,
-          preview?.result ? describeFit(preview.result).short : "",
-          (() => {
-            const n = lintDocument(doc).length;
-            return n ? `建议 ${n}` : "建议 0";
-          })(),
-          saveStatusText(savePhase, issues.length),
-        ]}
-      />}
 
       {dragging && (
         <div className="drop-hint" aria-hidden="true">

@@ -1,10 +1,10 @@
 // 中栏：当前模块的表单
 import { useEffect, useState } from "react";
-import { MODULE_FILES } from "../skin.ts";
 import { lintDocument, MODULE_LABELS, newId, type LintIssue, type Module, type RuyeDocument, type SkillCategory } from "../../../../packages/schema/src/index.ts";
 import { addItem, itemTitle, moveItem, removeItem, replaceModule, updateItem, type ListItem, type ListModule } from "../doc-ops.ts";
 import { Icon } from "./icons.tsx";
-import { BulletList, DateField, PhotoField, TagInput, TextArea, TextField } from "./fields.tsx";
+import { BulletList, ChoiceField, PhotoField, TagInput, TextArea, TextField } from "./fields.tsx";
+import { DateRange, MonthPicker } from "./DatePicker.tsx";
 
 /** 经历类模块的写法提示，收在「写法提示」里，需要时展开 */
 const BULLET_GUIDE = [
@@ -55,9 +55,6 @@ export function ModuleEditor({ doc, module: m, onChange, onRemove, onError, onRe
     <section className={`module-editor${m.visible ? "" : " is-hidden"}`} id={`module-${m.id}`} data-module={m.id} aria-labelledby={`module-title-${m.id}`}>
       <div className="editor-head">
         <h2 id={`module-title-${m.id}`}>{MODULE_LABELS[m.type]}</h2>
-        <span className="module-path" aria-hidden="true">
-          {MODULE_FILES[m.type]}
-        </span>
         {!m.visible && <span className="badge">已隐藏，不会出现在简历里</span>}
         <button type="button" className="danger-link" onClick={onRemoveModule} aria-label={`删除模块「${MODULE_LABELS[m.type]}」`}>
           删除模块
@@ -79,14 +76,14 @@ export function ModuleEditor({ doc, module: m, onChange, onRemove, onError, onRe
       {m.type === "basic_info" && (
         <div className="form-grid">
           <TextField label="姓名" value={m.data.name} onChange={(v) => patchData({ name: v })} placeholder="必填" />
-          <TextField label="电话" value={m.data.phone} onChange={(v) => patchData({ phone: v })} />
+          <TextField label="电话" value={m.data.phone} onChange={(v) => patchData({ phone: v })} type="tel" />
           <TextField label="邮箱" value={m.data.email} onChange={(v) => patchData({ email: v })} type="email" />
           <TextField label="所在城市" value={m.data.location} onChange={(v) => patchData({ location: v })} placeholder="如 天津" />
           <TextField label="GitHub" value={m.data.github} onChange={(v) => patchData({ github: v })} placeholder="https://github.com/…" />
           <TextField label="个人网站" value={m.data.website} onChange={(v) => patchData({ website: v })} />
           <TextField label="博客" value={m.data.blog} onChange={(v) => patchData({ blog: v })} />
-          <TextField label="性别（可选）" value={m.data.gender} onChange={(v) => patchData({ gender: v })} />
-          <TextField label="出生年月（可选）" value={m.data.birthday} onChange={(v) => patchData({ birthday: v })} placeholder="2005-06" />
+          <ChoiceField label="性别（可选）" value={m.data.gender} onChange={(v) => patchData({ gender: v })} options={["男", "女"]} />
+          <MonthPicker label="出生年月（可选）" value={m.data.birthday} onChange={(v) => patchData({ birthday: v })} related={`${new Date().getFullYear() - 21}-01`} />
           <PhotoField value={m.data.photoDataUrl} onChange={(v) => patchData({ photoDataUrl: v })} onError={onError} />
         </div>
       )}
@@ -94,8 +91,14 @@ export function ModuleEditor({ doc, module: m, onChange, onRemove, onError, onRe
       {m.type === "job_intention" && (
         <div className="form-grid">
           <TextField label="岗位" value={m.data.role} onChange={(v) => patchData({ role: v })} placeholder="如 Java 后端实习生" />
-          <TextField label="城市" value={m.data.city} onChange={(v) => patchData({ city: v })} placeholder="如 天津 / 北京" />
-          <TextField label="到岗时间" value={m.data.availability} onChange={(v) => patchData({ availability: v })} placeholder="如 2027 年暑期，可实习 6 个月" />
+          <ChoiceField label="城市" value={m.data.city} onChange={(v) => patchData({ city: v })} placeholder="如 天津 / 北京" options={["北京", "上海", "深圳", "杭州", "广州", "成都", "天津", "不限"]} />
+          <ChoiceField
+            label="到岗时间"
+            value={m.data.availability}
+            onChange={(v) => patchData({ availability: v })}
+            placeholder="如 2027 年暑期，可实习 6 个月"
+            options={["随时到岗", "一周内到岗", "一个月内到岗", `${new Date().getFullYear() + 1} 年暑期`, "可实习 6 个月以上"]}
+          />
           <TextField label="期望薪资（一般不建议写）" value={m.data.salary} onChange={(v) => patchData({ salary: v })} />
         </div>
       )}
@@ -240,6 +243,14 @@ function ItemsEditor({
 }) {
   const items = m.data.items as ListItem[];
   const patch = (itemId: string, p: Record<string, unknown>) => onChange(updateItem(doc, m.id, itemId, p));
+  // 技术栈建议：这份简历里各段经历写过的技术，按出现次数排
+  const techSuggest = (() => {
+    const count = new Map<string, number>();
+    for (const mod of doc.modules)
+      if ("items" in mod.data)
+        for (const x of mod.data.items as { techStack?: string[] }[]) for (const t of x.techStack ?? []) count.set(t, (count.get(t) ?? 0) + 1);
+    return [...count].sort((a, b) => b[1] - a[1]).map(([t]) => t);
+  })();
 
   return (
     <div className="items item-list">
@@ -303,7 +314,7 @@ function ItemsEditor({
                 ))}
               </ul>
             )}
-            {expanded && <div className="form-grid">{itemFields(m.type, it as unknown as Record<string, any>, (p) => patch(it.id, p))}</div>}
+            {expanded && <div className="form-grid">{itemFields(m.type, it as unknown as Record<string, any>, (p) => patch(it.id, p), techSuggest)}</div>}
           </section>
         );
       })}
@@ -324,20 +335,15 @@ function ItemsEditor({
 
 const BULLET_HINT = "动作 + 技术 + 结果，例如：引入二级缓存，将 P99 从 320ms 降到 140ms";
 
-function itemFields(type: ListModule["type"], it: Record<string, any>, set: (p: Record<string, unknown>) => void) {
-  const dates = (presentOk = true) => (
-    <>
-      <DateField label="开始" value={it.start} onChange={(v) => set({ start: v })} />
-      <DateField label="结束" value={it.end} onChange={(v) => set({ end: v })} allowPresent={presentOk} />
-    </>
-  );
+function itemFields(type: ListModule["type"], it: Record<string, any>, set: (p: Record<string, unknown>) => void, techSuggest: string[] = []) {
+  const dates = (presentOk = true) => <DateRange start={it.start} end={it.end} onStart={(v) => set({ start: v })} onEnd={(v) => set({ end: v })} presentOk={presentOk} />;
   switch (type) {
     case "education":
       return (
         <>
           <TextField label="学校" value={it.school} onChange={(v) => set({ school: v })} />
           <TextField label="专业" value={it.major} onChange={(v) => set({ major: v })} />
-          <TextField label="学历" value={it.degree} onChange={(v) => set({ degree: v })} placeholder="本科 / 硕士" />
+          <ChoiceField label="学历" value={it.degree} onChange={(v) => set({ degree: v })} options={["专科", "本科", "硕士", "博士"]} />
           {dates()}
           <BulletList label="亮点（成绩、课程、奖学金）" value={it.highlights ?? []} onChange={(v) => set({ highlights: v })} placeholder="GPA 3.7 / 4.0（专业前 10%）" />
         </>
@@ -350,7 +356,7 @@ function itemFields(type: ListModule["type"], it: Record<string, any>, set: (p: 
           <TextField label="岗位" value={it.title} onChange={(v) => set({ title: v })} />
           {dates()}
           <TextArea label="一句话背景（可选）" value={it.summary} onChange={(v) => set({ summary: v })} placeholder="如 电商订单与优惠券服务" />
-          <TagInput label="技术栈" value={it.techStack} onChange={(v) => set({ techStack: v })} />
+          <TagInput label="技术栈" value={it.techStack} onChange={(v) => set({ techStack: v })} suggest={techSuggest} />
           <BulletList label="职责与成果" value={it.bullets ?? []} onChange={(v) => set({ bullets: v })} placeholder={BULLET_HINT} />
         </>
       );
@@ -358,11 +364,11 @@ function itemFields(type: ListModule["type"], it: Record<string, any>, set: (p: 
       return (
         <>
           <TextField label="项目名" value={it.name} onChange={(v) => set({ name: v })} />
-          <TextField label="角色" value={it.role} onChange={(v) => set({ role: v })} placeholder="如 独立开发 / 后端负责人" />
+          <ChoiceField label="角色" value={it.role} onChange={(v) => set({ role: v })} options={["独立开发", "后端负责人", "核心开发", "团队成员"]} />
           {dates()}
           <TextField label="链接（可选）" value={it.url} onChange={(v) => set({ url: v })} placeholder="https://…" wide />
           <TextArea label="一句话简介（可选）" value={it.summary} onChange={(v) => set({ summary: v })} />
-          <TagInput label="技术栈" value={it.techStack} onChange={(v) => set({ techStack: v })} />
+          <TagInput label="技术栈" value={it.techStack} onChange={(v) => set({ techStack: v })} suggest={techSuggest} />
           <BulletList label="做了什么、结果如何" value={it.bullets ?? []} onChange={(v) => set({ bullets: v })} placeholder={BULLET_HINT} />
         </>
       );
@@ -381,7 +387,7 @@ function itemFields(type: ListModule["type"], it: Record<string, any>, set: (p: 
           <TextField label="论文题目" value={it.title} onChange={(v) => set({ title: v })} wide />
           <TextField label="作者" value={it.authors} onChange={(v) => set({ authors: v })} />
           <TextField label="期刊 / 会议" value={it.venue} onChange={(v) => set({ venue: v })} />
-          <DateField label="日期" value={it.date} onChange={(v) => set({ date: v })} />
+          <MonthPicker label="日期" value={it.date} onChange={(v) => set({ date: v })} />
           <TextField label="链接（可选）" value={it.url} onChange={(v) => set({ url: v })} />
         </>
       );
@@ -390,7 +396,7 @@ function itemFields(type: ListModule["type"], it: Record<string, any>, set: (p: 
         <>
           <TextField label="奖项" value={it.name} onChange={(v) => set({ name: v })} wide />
           <TextField label="颁发方（可选）" value={it.issuer} onChange={(v) => set({ issuer: v })} />
-          <DateField label="日期" value={it.date} onChange={(v) => set({ date: v })} />
+          <MonthPicker label="日期" value={it.date} onChange={(v) => set({ date: v })} />
           <TextField label="说明（可选）" value={it.description} onChange={(v) => set({ description: v })} wide />
         </>
       );

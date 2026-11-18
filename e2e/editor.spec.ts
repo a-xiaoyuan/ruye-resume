@@ -58,7 +58,7 @@ test("Markdown 导出后再导入，内容不变", async ({ page }) => {
   await page.getByRole("button", { name: /Go 后端/ }).click();
   await expect(nameField(page)).toHaveValue("顾远舟");
 
-  await page.locator('input[type="file"][accept=".json,.md,.txt"]').setInputFiles({ name: "roundtrip.md", mimeType: "text/markdown", buffer: Buffer.from(text) });
+  await page.locator('input[type="file"][accept=".json,.md,.txt,.pdf,application/pdf"]').setInputFiles({ name: "roundtrip.md", mimeType: "text/markdown", buffer: Buffer.from(text) });
   await expect(page.getByText("已从 Markdown 导入。")).toBeVisible();
   await expect(nameField(page)).toHaveValue("往返测试");
 });

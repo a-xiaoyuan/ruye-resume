@@ -1,5 +1,10 @@
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { LayoutEngine } from "../packages/engine/src/index.ts";
+import { loadNodeTemplates } from "../packages/templates/src/node.ts";
+import { loadNodeTypst } from "../scripts/typst-node.ts";
+import { LayoutService } from "../apps/web/src/layout-service.ts";
 import { importPdfBytes, pdfPlainTextToMarkdown } from "../apps/web/src/pdf-import.ts";
 
 function latinPdf(text: string): Uint8Array {
@@ -77,4 +82,40 @@ test("损坏、加密、过大的 PDF 都失败且不给出文档", async () => 
   const over = await importPdfBytes(big);
   assert.equal(over.ok, false);
   if (!over.ok) assert.match(over.message, /8MB/);
+});
+
+const typst = await loadNodeTypst();
+const typstSkip = "skip" in typst ? typst.skip : false;
+
+test("本应用导出的 PDF 再导入，中文姓名、电话、学校、日期和链接还在", { skip: typstSkip }, async () => {
+  if (!("backend" in typst)) return;
+  const svc = new LayoutService(new LayoutEngine(typst.backend), loadNodeTemplates());
+  const doc = JSON.parse(readFileSync(new URL("../fixtures/full.ruye.json", import.meta.url), "utf8"));
+  const out = await svc.exportPdf(doc, "fit-a4");
+  assert.equal(out.kind, "pdf");
+  if (out.kind !== "pdf") return;
+  const r = await importPdfBytes(out.pdf);
+  assert.equal(r.ok, true, r.ok ? "" : r.message);
+  if (!r.ok) return;
+  const basic = r.doc.modules.find((m) => m.type === "basic_info");
+  assert.ok(basic && basic.type === "basic_info");
+  assert.equal(basic.data.name, "林知夏");
+  assert.equal(basic.data.phone, "13800000000");
+  assert.equal(basic.data.email, "zhixia.lin@example.com");
+  assert.equal(basic.data.github, "https://github.com/example");
+  assert.equal(basic.data.photoDataUrl, undefined);
+  const edu = r.doc.modules.find((m) => m.type === "education");
+  assert.ok(edu && edu.type === "education");
+  assert.equal(edu.data.items[0].school, "示例理工大学");
+  assert.equal(edu.data.items[0].major, "网络工程");
+  assert.equal(edu.data.items[0].degree, "本科");
+  assert.equal(edu.data.items[0].start, "2024-09");
+  assert.equal(edu.data.items[0].end, "2028-06");
+  const projects = r.doc.modules.find((m) => m.type === "project");
+  assert.ok(projects && projects.type === "project");
+  assert.equal(projects.data.items[1]?.name, "轻量级 RPC 框架");
+  assert.equal(projects.data.items[1]?.url, "https://github.com/example/mini-rpc");
+  assert.match(r.message, /没有上传/);
+  assert.match(r.message, /扫描件/);
+  assert.match(r.message, /照片/);
 });

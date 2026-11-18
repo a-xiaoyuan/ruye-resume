@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { strFromU8, unzipSync } from "../apps/web/node_modules/fflate/esm/browser.js";
 import { expect, test, type Page } from "@playwright/test";
 
 /** 等排版引擎加载完、预览出现 A4 纸 */
@@ -58,7 +59,7 @@ test("Markdown 导出后再导入，内容不变", async ({ page }) => {
   await page.getByRole("button", { name: /Go 后端/ }).click();
   await expect(nameField(page)).toHaveValue("顾远舟");
 
-  await page.locator('input[type="file"][accept=".json,.md,.txt,.pdf,application/pdf"]').setInputFiles({ name: "roundtrip.md", mimeType: "text/markdown", buffer: Buffer.from(text) });
+  await page.locator('input[type="file"][accept*=".docx"]').setInputFiles({ name: "roundtrip.md", mimeType: "text/markdown", buffer: Buffer.from(text) });
   await expect(page.getByText("已从 Markdown 导入。")).toBeVisible();
   await expect(nameField(page)).toHaveValue("往返测试");
 });
@@ -139,6 +140,42 @@ test("日期点选：选开始后自动打开结束，可选「至今」", async
   await expect(card.getByRole("dialog", { name: "选择结束" })).toBeVisible();
   await card.getByRole("dialog", { name: "选择结束" }).getByRole("button", { name: "至今" }).click();
   await expect(card.getByRole("button", { name: /^结束：/ })).toHaveAccessibleName("结束：至今");
+});
+
+test("Word 导出后再导入，中文姓名和电话还在；坏文件不覆盖", async ({ page }) => {
+  await page.getByRole("button", { name: "导出", exact: true }).click();
+  const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("menuitem", { name: "导出 Word" }).click()]);
+  const bytes = readFileSync(await download.path());
+  expect(bytes[0]).toBe(0x50);
+  const xml = strFromU8(unzipSync(new Uint8Array(bytes))["word/document.xml"]);
+  expect(xml).toContain("<w:t>林知夏</w:t>");
+  expect(xml).toContain("13800000000");
+
+  await nameField(page).fill("保持不动");
+  await page.locator('input[type="file"][accept*=".docx"]').setInputFiles({ name: "broken.pdf", mimeType: "application/pdf", buffer: Buffer.from("not-a-pdf") });
+  await expect(page.getByText(/没有被替换/)).toBeVisible();
+  await expect(nameField(page)).toHaveValue("保持不动");
+
+  await page.locator('input[type="file"][accept*=".docx"]').setInputFiles({
+    name: "resume.docx",
+    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    buffer: bytes,
+  });
+  await expect(nameField(page)).toHaveValue("林知夏");
+  await expect(page.getByLabel("电话", { exact: true })).toHaveValue("13800000000");
+});
+
+test("PDF 导出后再导入，中文姓名还在", async ({ page }) => {
+  const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "下载 PDF" }).click()]);
+  const bytes = readFileSync(await download.path());
+  expect(bytes.subarray(0, 5).toString("latin1")).toBe("%PDF-");
+  await nameField(page).fill("将被换回");
+  await page.locator('input[type="file"][accept*=".docx"]').setInputFiles({ name: "resume.pdf", mimeType: "application/pdf", buffer: bytes });
+  await expect(nameField(page)).toHaveValue("林知夏");
+  await expect(page.getByLabel("电话", { exact: true })).toHaveValue("13800000000");
+  await expect(page.getByLabel("学校", { exact: true }).first()).toHaveValue("示例理工大学");
+  await expect(page.getByText(/没有上传/)).toBeVisible();
+  await expect(page.getByText(/扫描件里的图片文字仍无法识别/)).toBeVisible();
 });
 
 test("常用选项：点一下填入学历", async ({ page }) => {

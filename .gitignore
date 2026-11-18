@@ -8,8 +8,11 @@ dist/
 fonts-src/
 apps/web/public/fonts/
 packages/templates/fonts/
-# 构建时从 node_modules 复制的 wasm
+# 构建时从 node_modules 复制的 wasm 与 worker
 apps/web/public/wasm/
+apps/web/public/pdf.worker.min.mjs
+
+.idea/
 
 # 测试与 smoke 产物
 out/

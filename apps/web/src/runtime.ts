@@ -26,7 +26,13 @@ export interface Runtime {
 async function fetchBytes(url: string): Promise<Uint8Array> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`加载失败：${url}（HTTP ${res.status}）。字体需要先运行 pnpm fonts 生成。`);
-  return new Uint8Array(await res.arrayBuffer());
+  const buf = await res.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  // 校验是否是有效的字体二进制（防止开发服务器 SPA fallback 将 index.html 作为 200 返回）
+  if (bytes.length < 4 || (bytes[0] === 0x3c && bytes[1] === 0x21)) {
+    throw new Error(`加载字体失败：${url} 返回了 HTML 内容而非字体文件，请先运行 pnpm fonts 生成字体。`);
+  }
+  return bytes;
 }
 
 let pending: Promise<Runtime> | null = null;

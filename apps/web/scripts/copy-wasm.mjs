@@ -30,3 +30,13 @@ for (const [pkg, out] of [
   copyFileSync(wasm, join(outDir, out));
   console.log(`wasm: ${pkg} → public/wasm/${out}`);
 }
+
+// 复制 pdf.worker.min.mjs 到 public/，供 pdfjs-dist 在浏览器端纯本地加载
+try {
+  const pdfWorkerSrc = require.resolve("pdfjs-dist/legacy/build/pdf.worker.min.mjs");
+  const publicDir = join(here, "..", "public");
+  copyFileSync(pdfWorkerSrc, join(publicDir, "pdf.worker.min.mjs"));
+  console.log("pdf worker: pdfjs-dist → public/pdf.worker.min.mjs");
+} catch (e) {
+  console.warn("未能复制 pdf.worker.min.mjs:", e.message);
+}

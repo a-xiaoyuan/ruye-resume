@@ -18,7 +18,7 @@ import { ModuleEditor } from "./components/ModuleEditor.tsx";
 import { Preview, type PreviewData } from "./components/Preview.tsx";
 import { AccountMenu, useCloudSync } from "./components/AccountMenu.tsx";
 import { SAMPLES } from "./samples.ts";
-import { parseImport } from "./import-file.ts";
+import { parseImport, parseImportAsync } from "./import-file.ts";
 import { Logo, Menu } from "./components/Menu.tsx";
 import { ModulePills, Sidebar } from "./components/Sidebar.tsx";
 import { Icon } from "./components/icons.tsx";
@@ -376,7 +376,12 @@ export function App() {
     setView("editor");
   };
   async function importFile(file: File) {
-    const r = parseImport(file.name, await file.text());
+    const isPdf = file.name.toLowerCase().endsWith(".pdf");
+    if (isPdf) {
+      setNotice({ text: "正在解析 PDF 简历，请稍候...", level: "info" });
+    }
+    const content = isPdf ? await file.arrayBuffer() : await file.text();
+    const r = await parseImportAsync(file.name, content);
     if (!r.ok) return setNotice({ text: r.message, level: "error", sticky: r.sticky });
     replaceAll(r.doc);
     setRawBackup(null);
@@ -567,7 +572,7 @@ export function App() {
               { key: "md", label: "导出 Markdown", hint: "可版本管理" },
             ]}
           />
-          <input ref={fileInput} type="file" accept=".json,.md,.txt" hidden onChange={(e) => (e.target.files?.[0] && importFile(e.target.files[0]), (e.target.value = ""))} />
+          <input ref={fileInput} type="file" accept=".json,.md,.txt,.pdf" hidden onChange={(e) => (e.target.files?.[0] && importFile(e.target.files[0]), (e.target.value = ""))} />
           <button className="primary" aria-label="下载 PDF" disabled={!engineReady || exporting} onClick={() => exportPdf()}>
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path d="M8 2v8m0 0L5 7m3 3 3-3M3 12.5h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
@@ -728,7 +733,7 @@ export function App() {
 
       {dragging && (
         <div className="drop-hint" aria-hidden="true">
-          <span>松开即可导入：.ruye.json 或 Markdown，会另存为一份新简历</span>
+          <span>松开即可导入：.ruye.json、Markdown 或 PDF 简历，会另存为一份新简历</span>
         </div>
       )}
       {historyFor && (

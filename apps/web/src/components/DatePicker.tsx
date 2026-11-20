@@ -62,7 +62,11 @@ export function MonthPicker({ label, value, onChange, allowPresent, kind = "sing
     if (!open) return;
     setYear(initialYear(value, related, kind));
     setYearMode(false);
-    requestAnimationFrame(() => (grid.current?.querySelector<HTMLButtonElement>("[aria-pressed='true']") ?? grid.current?.querySelector<HTMLButtonElement>("button"))?.focus());
+    requestAnimationFrame(() => {
+      // 日期框靠近编辑区底部时，把整个弹层滚进可视区，否则「至今」「本月」会藏在下面
+      pop.current?.scrollIntoView({ block: "nearest" });
+      (grid.current?.querySelector<HTMLButtonElement>("[aria-pressed='true']") ?? grid.current?.querySelector<HTMLButtonElement>("button"))?.focus({ preventScroll: true });
+    });
     // pointerdown 同时覆盖鼠标和触屏点击
     const close = (e: PointerEvent) => !root.current?.contains(e.target as Node) && setOpen(false);
     document.addEventListener("pointerdown", close);

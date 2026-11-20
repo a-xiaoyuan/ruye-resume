@@ -1097,8 +1097,10 @@ kbd { display: inline-block; padding: 0 5px; margin: 0 1px; font-family: inherit
   .brand-name em { display: none; }
   .brand-name { font-size: 18px; }
   .library-btn { padding: 0 12px; }
-  .actions { overflow-x: auto; scrollbar-width: none; }
+  .actions { overflow-x: auto; scrollbar-width: none; gap: 0; padding: 3px; }
   .actions > *, .undo-group > * { flex-shrink: 0; }
+  /* 更窄的手机上工具条仍可能放不下：「下载 PDF」固定在右端，其余按钮从它下面滑过 */
+  .actions button.primary { position: sticky; right: 0; z-index: 1; }
   .topbar .icon-btn { width: 44px; height: 44px; }
   .actions > .menu > .menu-trigger, .actions .account-btn, .library-btn, .doc-title { min-height: 44px; }
   .module-pills button { min-height: 44px; }

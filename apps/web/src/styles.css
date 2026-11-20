@@ -1127,3 +1127,13 @@ kbd { display: inline-block; padding: 0 5px; margin: 0 1px; font-family: inherit
   .stage .zoom button { min-width: 44px; min-height: 44px; }
   .collapse-btn { min-width: 44px; min-height: 44px; }
 }
+
+/* 没有悬停的设备（手机、平板）：平时藏起来、悬停才出现的按钮直接显示，
+   否则看不见却点得到，容易误删；只对键盘有用的提示不显示 */
+@media (hover: none) {
+  .date-clear, .danger-link, .bullets .row-actions, .item-card header .row-actions, .eye { opacity: 1; }
+  .date-hint, .key-hint { display: none; }
+}
+@media (pointer: coarse) {
+  .date-clear { width: 40px; height: 40px; }
+}

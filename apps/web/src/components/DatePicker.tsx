@@ -1,6 +1,6 @@
 // 月份选择器：点开选年、选月，不用打字。结束日期可以选「至今」；
 // 起止日期成对使用时，选完开始会自动打开结束，并在结束早于开始时提示。
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { PRESENT } from "../../../../packages/schema/src/index.ts";
 import { displayDate, endBeforeStart, formatYM, initialYear, parseYM } from "../dates.ts";
 import { Icon } from "./icons.tsx";
@@ -33,6 +33,24 @@ export function MonthPicker({ label, value, onChange, allowPresent, kind = "sing
   const root = useRef<HTMLDivElement>(null);
   const grid = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const pop = useRef<HTMLDivElement>(null);
+  // 右边一栏的日期框：面板往左展开，否则会被写作面板的边缘裁掉
+  const [flip, setFlip] = useState(false);
+  useLayoutEffect(() => {
+    if (!open) {
+      setFlip(false);
+      return;
+    }
+    const el = pop.current;
+    const field = root.current;
+    const box = field?.closest(".editor, .studio, .dialog") as HTMLElement | null;
+    if (!el || !field || !box) return;
+    const p = el.getBoundingClientRect();
+    const b = box.getBoundingClientRect();
+    // 往左展开后的左边缘；手机上窄栏往左也放不下时，保持向右
+    const flippedLeft = field.getBoundingClientRect().right - p.width;
+    setFlip(p.right > b.right - 8 && flippedLeft >= b.left + 8);
+  }, [open]);
   const v = value ?? "";
   const sel = parseYM(v);
   const now = new Date();
@@ -103,7 +121,7 @@ export function MonthPicker({ label, value, onChange, allowPresent, kind = "sing
         )}
       </div>
       {open && (
-        <div className="date-pop" role="dialog" aria-label={`选择${label}`} onKeyDown={onGridKey}>
+        <div ref={pop} className={`date-pop${flip ? " flip" : ""}`} role="dialog" aria-label={`选择${label}`} onKeyDown={onGridKey}>
           <div className="date-pop-head">
             <button type="button" className="icon-btn" aria-label={yearMode ? "往前 12 年" : "上一年"} onClick={() => setYear((y) => y - (yearMode ? 12 : 1))}>
               <Icon name="left" size={16} />

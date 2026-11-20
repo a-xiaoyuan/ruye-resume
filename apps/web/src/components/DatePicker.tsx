@@ -1,6 +1,6 @@
 // 月份选择器：点开选年、选月，不用打字。结束日期可以选「至今」；
 // 起止日期成对使用时，选完开始会自动打开结束，并在结束早于开始时提示。
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { PRESENT } from "../../../../packages/schema/src/index.ts";
 import { displayDate, endBeforeStart, formatYM, initialYear, parseYM } from "../dates.ts";
 import { Icon } from "./icons.tsx";
@@ -19,11 +19,13 @@ interface PickerProps {
   /** 选好一个值之后 */
   onPicked?: (v: string) => void;
   invalid?: boolean;
+  /** 出错提示的 id，读屏时和这个日期框一起读出 */
+  describedBy?: string;
 }
 
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
 
-export function MonthPicker({ label, value, onChange, allowPresent, kind = "single", related, open: openProp, onOpenChange, onPicked, invalid }: PickerProps) {
+export function MonthPicker({ label, value, onChange, allowPresent, kind = "single", related, open: openProp, onOpenChange, onPicked, invalid, describedBy }: PickerProps) {
   const id = useId();
   const [openState, setOpenState] = useState(false);
   const open = openProp ?? openState;
@@ -33,6 +35,24 @@ export function MonthPicker({ label, value, onChange, allowPresent, kind = "sing
   const root = useRef<HTMLDivElement>(null);
   const grid = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const pop = useRef<HTMLDivElement>(null);
+  // 右边一栏的日期框：面板往左展开，否则会被写作面板的边缘裁掉
+  const [flip, setFlip] = useState(false);
+  useLayoutEffect(() => {
+    if (!open) {
+      setFlip(false);
+      return;
+    }
+    const el = pop.current;
+    const field = root.current;
+    const box = field?.closest(".editor, .studio, .dialog") as HTMLElement | null;
+    if (!el || !field || !box) return;
+    const p = el.getBoundingClientRect();
+    const b = box.getBoundingClientRect();
+    // 往左展开后的左边缘；手机上窄栏往左也放不下时，保持向右
+    const flippedLeft = field.getBoundingClientRect().right - p.width;
+    setFlip(p.right > b.right - 8 && flippedLeft >= b.left + 8);
+  }, [open]);
   const v = value ?? "";
   const sel = parseYM(v);
   const now = new Date();
@@ -42,10 +62,15 @@ export function MonthPicker({ label, value, onChange, allowPresent, kind = "sing
     if (!open) return;
     setYear(initialYear(value, related, kind));
     setYearMode(false);
-    requestAnimationFrame(() => (grid.current?.querySelector<HTMLButtonElement>("[aria-pressed='true']") ?? grid.current?.querySelector<HTMLButtonElement>("button"))?.focus());
-    const close = (e: MouseEvent) => !root.current?.contains(e.target as Node) && setOpen(false);
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
+    requestAnimationFrame(() => {
+      // 日期框靠近编辑区底部时，把整个弹层滚进可视区，否则「至今」「本月」会藏在下面
+      pop.current?.scrollIntoView({ block: "nearest" });
+      (grid.current?.querySelector<HTMLButtonElement>("[aria-pressed='true']") ?? grid.current?.querySelector<HTMLButtonElement>("button"))?.focus({ preventScroll: true });
+    });
+    // pointerdown 同时覆盖鼠标和触屏点击
+    const close = (e: PointerEvent) => !root.current?.contains(e.target as Node) && setOpen(false);
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -90,6 +115,8 @@ export function MonthPicker({ label, value, onChange, allowPresent, kind = "sing
           className={`date-trigger${shown ? "" : " empty"}${invalid ? " invalid" : ""}`}
           aria-haspopup="dialog"
           aria-expanded={open}
+          aria-invalid={invalid || undefined}
+          aria-describedby={invalid ? describedBy : undefined}
           aria-label={`${label}：${shown || "未选择"}`}
           onClick={() => setOpen(!open)}
         >
@@ -103,7 +130,7 @@ export function MonthPicker({ label, value, onChange, allowPresent, kind = "sing
         )}
       </div>
       {open && (
-        <div className="date-pop" role="dialog" aria-label={`选择${label}`} onKeyDown={onGridKey}>
+        <div ref={pop} className={`date-pop${flip ? " flip" : ""}`} role="dialog" aria-label={`选择${label}`} onKeyDown={onGridKey}>
           <div className="date-pop-head">
             <button type="button" className="icon-btn" aria-label={yearMode ? "往前 12 年" : "上一年"} onClick={() => setYear((y) => y - (yearMode ? 12 : 1))}>
               <Icon name="left" size={16} />
@@ -165,12 +192,13 @@ export function MonthPicker({ label, value, onChange, allowPresent, kind = "sing
 /** 起止日期：选完开始自动打开结束；结束早于开始时提示 */
 export function DateRange({ start, end, onStart, onEnd, presentOk = true }: { start?: string; end?: string; onStart: (v: string) => void; onEnd: (v: string) => void; presentOk?: boolean }) {
   const [endOpen, setEndOpen] = useState(false);
+  const errId = useId();
   const wrong = endBeforeStart(start, end);
   return (
     <>
       <MonthPicker label="开始" kind="start" value={start} related={end} onChange={onStart} onPicked={() => !end && setEndOpen(true)} />
-      <MonthPicker label="结束" kind="end" value={end} related={start} onChange={onEnd} allowPresent={presentOk} open={endOpen} onOpenChange={setEndOpen} invalid={wrong} />
-      {wrong && <p className="hint error wide-hint">结束时间早于开始时间，检查一下是不是选反了。</p>}
+      <MonthPicker label="结束" kind="end" value={end} related={start} onChange={onEnd} allowPresent={presentOk} open={endOpen} onOpenChange={setEndOpen} invalid={wrong} describedBy={errId} />
+      {wrong && <p id={errId} className="hint error wide-hint" role="alert">结束时间早于开始时间，检查一下是不是选反了。</p>}
     </>
   );
 }

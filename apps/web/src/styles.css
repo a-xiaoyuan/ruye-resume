@@ -896,8 +896,11 @@ kbd { display: inline-block; padding: 0 5px; margin: 0 1px; font-family: inherit
 .cloud-strip, .plain-list { border-radius: 14px; box-shadow: var(--card-shadow); }
 
 @media (max-width: 1180px) {
-  .stage { grid-template-columns: 1fr; overflow-y: auto; }
-  .studio { min-height: 70vh; }
+  /* 单列时编辑区固定高度、内部滚动；预览按完整高度排在下面，整页滚到它。
+     否则自动行高只把剩下的空间分给预览，手机上只剩二十来像素 */
+  .stage { grid-template-columns: 1fr; grid-auto-rows: max-content; overflow-y: auto; }
+  .studio { height: 70vh; min-height: 70vh; }
+  .stage .preview { overflow: visible; }
   .stage .board-wrap { padding-right: 110px; }
 }
 

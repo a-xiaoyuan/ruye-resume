@@ -1,6 +1,7 @@
 // 左栏「模板」页：模板缩略图、主题色、页面模式。只改 doc.layout，不碰内容。
 import { THEMES, THEME_IDS, type PageMode, type RuyeDocument } from "../../../../packages/schema/src/index.ts";
 import { TEMPLATE_META, templateMeta } from "../../../../packages/templates/src/index.ts";
+import { radioKeys, radioTabIndex } from "../a11y.ts";
 import { Icon } from "./icons.tsx";
 
 // 缩略图由 scripts/thumbs.py 用真实排版生成（同一份完整示例），看到的就是排出来的样子
@@ -33,8 +34,8 @@ export function StylePanel({ doc, onChange }: { doc: RuyeDocument; onChange: (do
             {g.label}
             <span>{g.hint}</span>
           </div>
-          <div className="tpl-grid" role="radiogroup" aria-label={`${g.label}模板`}>
-            {TEMPLATE_META.filter((t) => t.group === g.id).map((t) => {
+          <div className="tpl-grid" role="radiogroup" aria-label={`${g.label}模板`} onKeyDown={radioKeys}>
+            {TEMPLATE_META.filter((t) => t.group === g.id).map((t, i, list) => {
               const on = layout.templateId === t.id;
               return (
                 <button
@@ -42,6 +43,7 @@ export function StylePanel({ doc, onChange }: { doc: RuyeDocument; onChange: (do
                   type="button"
                   role="radio"
                   aria-checked={on}
+                  tabIndex={radioTabIndex(on, i, list.some((x) => x.id === layout.templateId))}
                   aria-label={t.name}
                   title={t.description}
                   className={`tpl-card${on ? " on" : ""}`}
@@ -67,13 +69,14 @@ export function StylePanel({ doc, onChange }: { doc: RuyeDocument; onChange: (do
       <div className="panel-caption">
         主题色<span>{fixed ? "这套模板固定黑白" : THEMES[theme].label}</span>
       </div>
-      <div className={`swatches${fixed ? " disabled" : ""}`} role="radiogroup" aria-label="主题色">
-        {THEME_IDS.map((id) => (
+      <div className={`swatches${fixed ? " disabled" : ""}`} role="radiogroup" aria-label="主题色" onKeyDown={radioKeys}>
+        {THEME_IDS.map((id, i) => (
           <button
             key={id}
             type="button"
             role="radio"
             aria-checked={theme === id}
+            tabIndex={radioTabIndex(theme === id, i, THEME_IDS.includes(theme))}
             aria-label={THEMES[id].label}
             title={fixed ? "极简模板不使用主题色" : THEMES[id].label}
             disabled={fixed}
@@ -84,13 +87,14 @@ export function StylePanel({ doc, onChange }: { doc: RuyeDocument; onChange: (do
       </div>
 
       <div className="panel-caption">页面模式</div>
-      <div className="seg" role="radiogroup" aria-label="页面模式">
-        {MODES.map((m) => (
+      <div className="seg" role="radiogroup" aria-label="页面模式" onKeyDown={radioKeys}>
+        {MODES.map((m, i) => (
           <button
             key={m.id}
             type="button"
             role="radio"
             aria-checked={layout.pageMode === m.id}
+            tabIndex={radioTabIndex(layout.pageMode === m.id, i, MODES.some((x) => x.id === layout.pageMode))}
             className={layout.pageMode === m.id ? "on" : ""}
             title={m.name}
             onClick={() => onChange({ ...doc, layout: { ...layout, pageMode: m.id } })}

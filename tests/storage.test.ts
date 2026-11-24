@@ -3,7 +3,7 @@ import { beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { normalizeDate, recoverDocument, validateDocument, type RuyeDocument } from "../packages/schema/src/index.ts";
-import { deleteDocument, listDocuments, loadDocument, loadOutcome, newDocumentId, openSession, saveCurrent, saveStatusText } from "../apps/web/src/storage.ts";
+import { deleteDocument, fingerprint, listDocuments, loadDocument, loadOutcome, newDocumentId, openSession, saveChecked, saveCurrent, saveStatusText, storedFingerprint } from "../apps/web/src/storage.ts";
 import { duplicateDocument, setAlias } from "../apps/web/src/doc-ops.ts";
 
 class MemoryStorage {
@@ -285,4 +285,55 @@ test("新简历 id 不重复；备注名参与校验与草稿恢复", () => {
   assert.ok(rec);
   assert.equal(rec.doc.meta.alias, undefined);
   assert.equal(nameOf(rec.doc), "张三");
+});
+
+// ---------------------------------------------------------------- 多个标签页
+
+test("两个标签页打开同一份：B 改过之后，A 拿旧指纹保存会被拦下，不覆盖 B 的修改", () => {
+  assert.equal(saveCurrent(userDoc("2028-06"), "doc-1"), null);
+  const a = loadDocument("doc-1")!;
+  const b = loadDocument("doc-1")!;
+  assert.equal(a.fingerprint, b.fingerprint);
+
+  // A 改姓名
+  const aDoc = structuredClone(a.doc);
+  if (aDoc.modules[0].type === "basic_info") aDoc.modules[0].data.name = "A 改的名字";
+  const ra = saveChecked(aDoc, "doc-1", "merge", a.fingerprint);
+  assert.ok(ra.ok);
+
+  // B 还拿着打开时的指纹：被拦下，存档里仍是 A 的版本
+  const bDoc = structuredClone(b.doc);
+  if (bDoc.modules[0].type === "basic_info") bDoc.modules[0].data.name = "B 改的名字";
+  const rb = saveChecked(bDoc, "doc-1", "merge", b.fingerprint);
+  assert.ok(!rb.ok && rb.conflict && !rb.conflict.deleted);
+  assert.equal(nameOf(loadDocument("doc-1")!.doc), "A 改的名字");
+
+  // A 接着用自己最新的指纹保存，照常写入
+  if (aDoc.modules[0].type === "basic_info") aDoc.modules[0].data.phone = "13800000000";
+  assert.ok(ra.ok && saveChecked(aDoc, "doc-1", "merge", ra.fingerprint).ok);
+
+  // B 选择「保留这一页的版本」：拿存档现状的指纹再写
+  const rb2 = saveChecked(bDoc, "doc-1", "merge", storedFingerprint("doc-1"));
+  assert.ok(rb2.ok);
+  assert.equal(nameOf(loadDocument("doc-1")!.doc), "B 改的名字");
+});
+
+test("另一标签页删掉了这份简历：保存被拦下并说明是删除", () => {
+  assert.equal(saveCurrent(userDoc("2028-06"), "doc-1"), null);
+  const fp = loadDocument("doc-1")!.fingerprint;
+  assert.equal(deleteDocument("doc-1"), null);
+  const r = saveChecked(userDoc("2028-06"), "doc-1", "merge", fp);
+  assert.ok(!r.ok && r.conflict?.deleted);
+  assert.equal(loadDocument("doc-1"), null);
+});
+
+test("指纹不计 updatedAt：只是重新保存同样的内容不算外部修改", () => {
+  const doc = userDoc("2028-06");
+  const r1 = saveChecked(doc, "doc-1", "merge", null);
+  assert.ok(r1.ok);
+  const r2 = saveChecked(doc, "doc-1", "merge", r1.fingerprint);
+  assert.ok(r2.ok);
+  assert.equal(r1.fingerprint, r2.fingerprint);
+  assert.equal(fingerprint(loadDocument("doc-1")!.doc), r2.fingerprint);
+  assert.equal(saveStatusText("conflict", 0), "另一标签页改过，已暂停保存");
 });

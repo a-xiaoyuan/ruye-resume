@@ -10,7 +10,7 @@ const CURRENT_KEY = "ruye:currentId";
 
 export type LoadOutcome =
   | { kind: "empty" }
-  | { kind: "draft"; id: string; doc: RuyeDocument; issues: ValidationIssue[] }
+  | { kind: "draft"; id: string; doc: RuyeDocument; issues: ValidationIssue[]; fingerprint: string }
   | { kind: "unreadable"; message: string; raw: string | null };
 
 export interface SessionStart {
@@ -22,6 +22,18 @@ export interface SessionStart {
   rawBackup: string | null;
   /** 继续写入同一条存档；null 表示还没有 id，第一次保存时用 doc-1 */
   storageId: string | null;
+  /** 打开时存档里这份简历的内容指纹；null 表示存档里还没有它 */
+  fingerprint: string | null;
+}
+
+/**
+ * 内容指纹：写入前拿它和存档里的现状比，判断是否被其他标签页改过。
+ * 不计 updatedAt，只是重新保存同样的内容不算修改，两个标签页之间不会来回触发
+ */
+export function fingerprint(doc: unknown): string {
+  if (!isObj(doc)) return JSON.stringify(doc) ?? "";
+  const meta = isObj(doc.meta) ? { ...doc.meta, updatedAt: "" } : doc.meta;
+  return JSON.stringify({ ...doc, meta });
 }
 
 function isObj(v: unknown): v is Record<string, unknown> {
@@ -31,13 +43,13 @@ function isObj(v: unknown): v is Record<string, unknown> {
 /** 打开编辑器时怎么用本地存档。只有真正没有存档时才用示例。 */
 export function openSession(outcome: LoadOutcome, sample: RuyeDocument): SessionStart {
   if (outcome.kind === "empty") {
-    return { doc: structuredClone(sample), persist: true, isSample: true, notice: null, rawBackup: null, storageId: null };
+    return { doc: structuredClone(sample), persist: true, isSample: true, notice: null, rawBackup: null, storageId: null, fingerprint: null };
   }
   if (outcome.kind === "draft") {
     const notice = outcome.issues.length
       ? `已恢复本地草稿，姓名和正文都还在。有 ${outcome.issues.length} 处格式问题需要修正，刷新不会丢掉内容。`
       : null;
-    return { doc: outcome.doc, persist: true, isSample: false, notice, rawBackup: null, storageId: outcome.id };
+    return { doc: outcome.doc, persist: true, isSample: false, notice, rawBackup: null, storageId: outcome.id, fingerprint: outcome.fingerprint };
   }
   return {
     doc: createEmptyDocument(),
@@ -46,6 +58,7 @@ export function openSession(outcome: LoadOutcome, sample: RuyeDocument): Session
     notice: `${outcome.message}可以下载原始存档。在你明确新建、载入示例或导入之前，不会写入，也不会换成示例简历。`,
     rawBackup: outcome.raw,
     storageId: null,
+    fingerprint: null,
   };
 }
 
@@ -88,7 +101,7 @@ export function loadOutcome(): LoadOutcome {
     const recovered = recoverDocument(item.doc);
     if (!recovered) continue;
     const id = typeof item.id === "string" && item.id !== "" ? item.id : "doc-1";
-    return { kind: "draft", id, doc: recovered.doc, issues: recovered.issues };
+    return { kind: "draft", id, doc: recovered.doc, issues: recovered.issues, fingerprint: fingerprint(item.doc) };
   }
   return { kind: "unreadable", message: "本地存档里没有可恢复的简历，已原样保留，没有用示例覆盖。", raw };
 }
@@ -96,12 +109,24 @@ export function loadOutcome(): LoadOutcome {
 export type SaveMode = "merge" | "replace";
 
 /** 顶栏文案。只有写入成功才说「已保留」。 */
-export function saveStatusText(phase: "blocked" | "pending" | "saved" | "failed", issueCount: number): string {
+export type SavePhase = "blocked" | "pending" | "saved" | "failed" | "conflict";
+
+export function saveStatusText(phase: SavePhase, issueCount: number): string {
   if (phase === "blocked") return "未写入，以免覆盖无法读取的存档";
+  if (phase === "conflict") return "另一标签页改过，已暂停保存";
   if (phase === "failed") return "保存失败，未写入本机";
   if (phase === "pending") return "正在写入本机…";
   if (issueCount > 0) return `草稿已保留（${issueCount} 处格式需修正）`;
   return "仅保存在此浏览器";
+}
+
+/** 窄屏顶栏用的短文案：只说结果，完整说明放在 title 里 */
+export function saveStatusShort(phase: SavePhase): string {
+  if (phase === "blocked") return "未写入";
+  if (phase === "conflict") return "已暂停";
+  if (phase === "failed") return "保存失败";
+  if (phase === "pending") return "保存中";
+  return "已保存";
 }
 
 /**
@@ -109,36 +134,64 @@ export function saveStatusText(phase: "blocked" | "pending" | "saved" | "failed"
  * replace 只用于用户明确新建、载入示例或导入，允许覆盖原先无法打开的存档。
  */
 export function saveCurrent(doc: RuyeDocument, id?: string, mode: SaveMode = "merge"): string | null {
+  const r = saveChecked(doc, id, mode);
+  return r.ok ? null : r.message;
+}
+
+export type SaveResult = { ok: true; fingerprint: string } | { ok: false; message: string; conflict?: { deleted: boolean } };
+
+/**
+ * 带外部修改检测的保存。expected 是上次读取或写入时存档里这份简历的指纹（null 表示当时还没有它）；
+ * 存档现状和它对不上，说明其他标签页改过或删掉了，这时不写入，返回 conflict，由调用方让用户决定。
+ * expected 为 undefined 时不检查（replace 模式也不检查：那是用户明确要覆盖）
+ */
+export function saveChecked(doc: RuyeDocument, id?: string, mode: SaveMode = "merge", expected?: string | null): SaveResult {
   let current: string;
   try {
     current = id ?? localStorage.getItem(CURRENT_KEY) ?? "doc-1";
   } catch (e) {
-    return `本地保存失败：${(e as Error).message}。未写入。`;
+    return { ok: false, message: `本地保存失败：${(e as Error).message}。未写入。` };
   }
   let others: Record<string, unknown>[] = [];
   if (mode === "merge") {
     const existing = readForMerge(current);
-    if (!existing.ok) return existing.message;
+    if (!existing.ok) return { ok: false, message: existing.message };
+    if (expected !== undefined && existing.fingerprint !== expected) {
+      const deleted = existing.fingerprint === null;
+      return {
+        ok: false,
+        message: deleted ? "这份简历在另一标签页里被删除了。" : "这份简历在另一标签页里修改过。",
+        conflict: { deleted },
+      };
+    }
     others = existing.others;
   }
   try {
     const stored = { id: current, doc: { ...doc, meta: { ...doc.meta, updatedAt: new Date().toISOString() } } };
     localStorage.setItem(DOCS_KEY, JSON.stringify([stored, ...others]));
     localStorage.setItem(CURRENT_KEY, current);
-    return null;
+    return { ok: true, fingerprint: fingerprint(stored.doc) };
   } catch (e) {
-    return `本地保存失败：${(e as Error).message}。未写入。`;
+    return { ok: false, message: `本地保存失败：${(e as Error).message}。未写入。` };
   }
 }
 
-function readForMerge(id: string): { ok: true; others: Record<string, unknown>[] } | { ok: false; message: string } {
+/** 存档里这份简历现在的指纹；不存在时为 null，存档读不出来时为 undefined */
+export function storedFingerprint(id: string): string | null | undefined {
+  const r = readList();
+  if (!r.ok) return undefined;
+  const item = r.list.find((x) => isObj(x) && x.id === id);
+  return item && isObj(item) && "doc" in item ? fingerprint(item.doc) : null;
+}
+
+function readForMerge(id: string): { ok: true; others: Record<string, unknown>[]; fingerprint: string | null } | { ok: false; message: string } {
   let raw: string | null;
   try {
     raw = localStorage.getItem(DOCS_KEY);
   } catch (e) {
     return { ok: false, message: `本地保存失败：无法读取现有存档（${(e as Error).message}）。未写入，以免覆盖。` };
   }
-  if (raw === null || raw === "") return { ok: true, others: [] };
+  if (raw === null || raw === "") return { ok: true, others: [], fingerprint: null };
   let list: unknown;
   try {
     list = JSON.parse(raw);
@@ -150,7 +203,8 @@ function readForMerge(id: string): { ok: true; others: Record<string, unknown>[]
   if (current && isObj(current) && "doc" in current && recoverDocument(current.doc) === null) {
     return { ok: false, message: "本地保存失败：现有存档无法在编辑器中安全打开。未写入，以免覆盖。" };
   }
-  return { ok: true, others: list.filter((x): x is Record<string, unknown> => isObj(x) && x.id !== id) };
+  const fp = current && isObj(current) && "doc" in current ? fingerprint(current.doc) : null;
+  return { ok: true, others: list.filter((x): x is Record<string, unknown> => isObj(x) && x.id !== id), fingerprint: fp };
 }
 
 // ---------------------------------------------------------------- 多份简历
@@ -207,12 +261,18 @@ export function listDocuments(): DocSummary[] {
 }
 
 /** 打开指定简历；不存在或无法恢复时返回 null */
-export function loadDocument(id: string): { doc: RuyeDocument; issues: ValidationIssue[] } | null {
+export function loadDocument(id: string): { doc: RuyeDocument; issues: ValidationIssue[]; fingerprint: string } | null {
   const r = readList();
   if (!r.ok) return null;
   const item = r.list.find((x) => isObj(x) && x.id === id);
   if (!item || !isObj(item) || !("doc" in item)) return null;
-  return recoverDocument(item.doc);
+  const rec = recoverDocument(item.doc);
+  return rec ? { ...rec, fingerprint: fingerprint(item.doc) } : null;
+}
+
+/** 其他标签页写存档时浏览器发 storage 事件，用它判断是不是存档键变了 */
+export function isDocsKey(key: string | null): boolean {
+  return key === null || key === DOCS_KEY;
 }
 
 /** 记住当前打开的是哪一份（下次打开编辑器时恢复它） */

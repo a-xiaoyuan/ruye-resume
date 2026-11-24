@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   checkExportable,
   createEmptyDocument,
@@ -12,7 +12,7 @@ import {
 } from "../../../packages/schema/src/index.ts";
 import { describeFit, findMissingChars } from "../../../packages/engine/src/index.ts";
 import { createLayoutClient } from "./layout-client.ts";
-import { deleteDocument, download, listDocuments, loadDocument, loadOutcome, newDocumentId, openSession, saveCurrent, saveStatusText, setCurrentId, type SaveMode, putDocument } from "./storage.ts";
+import { deleteDocument, download, isDocsKey, listDocuments, loadDocument, loadOutcome, newDocumentId, openSession, saveChecked, saveStatusShort, saveStatusText, setCurrentId, storedFingerprint, type SaveMode, type SavePhase, putDocument } from "./storage.ts";
 import { addModule, duplicateDocument, removeModule, setAlias, syncTitle } from "./doc-ops.ts";
 import { ModuleEditor } from "./components/ModuleEditor.tsx";
 import { Preview, type PreviewData } from "./components/Preview.tsx";
@@ -52,7 +52,13 @@ export function App() {
   const [isSample, setIsSample] = useState(opened.isSample);
   const [persist, setPersist] = useState(opened.persist);
   const [writeMode, setWriteMode] = useState<SaveMode>("merge");
-  const [savePhase, setSavePhase] = useState<"blocked" | "pending" | "saved" | "failed">(opened.persist ? "pending" : "blocked");
+  const [savePhase, setSavePhase] = useState<SavePhase>(opened.persist ? "pending" : "blocked");
+  // 存档里这份简历上次读写时的内容指纹。写入前拿它和存档现状比，对不上就是其他标签页改过
+  const baseline = useRef<string | null>(opened.fingerprint);
+  // 其他标签页改过（deleted：删掉了）且本页有未写入的修改：暂停自动保存，等用户决定
+  const [conflict, setConflict] = useState<{ deleted: boolean } | null>(null);
+  // 刚从存档读回来的文档不用再写一遍
+  const skipSave = useRef<RuyeDocument | null>(null);
   // 当前简历的存档 id。切换、新建、复制时改变
   const [docId, setDocId] = useState<string>(() => opened.storageId ?? newDocumentId());
   // 首次打开时自动载入、还没被改过的示例：新建或导入时直接复用它的存档位置，免得列表里堆示例
@@ -93,6 +99,24 @@ export function App() {
       /* 存不了就只在这次生效 */
     }
   };
+  // 窄屏（≤900px）一次只放编辑或预览中的一块，用顶部的切换条换
+  const narrow = useMedia("(max-width: 900px)");
+  const [mobilePane, setMobilePane] = useState<"edit" | "preview">("edit");
+  // 切走时记下各自滚到哪，切回来接着写
+  const paneScroll = useRef({ edit: 0, preview: 0 });
+  const previewRef = useRef<HTMLElement>(null);
+  const switchPane = (p: "edit" | "preview") => {
+    if (p === mobilePane) return;
+    const el = mobilePane === "edit" ? editorRef.current : previewRef.current;
+    if (el) paneScroll.current[mobilePane] = el.scrollTop;
+    setMobilePane(p);
+  };
+  useLayoutEffect(() => {
+    if (!narrow) return;
+    const el = mobilePane === "edit" ? editorRef.current : previewRef.current;
+    // 编辑区设了平滑滚动，这里要瞬间回到原处
+    if (el) el.scrollTo({ top: paneScroll.current[mobilePane], behavior: "instant" });
+  }, [mobilePane, narrow]);
   const setSkin = (s: Skin) => {
     setSkinState(s);
     saveSkin(s);
@@ -179,6 +203,8 @@ export function App() {
       setWriteMode("replace");
     }
     setSavePhase("pending");
+    if (!reuse) baseline.current = null;
+    setConflict(null);
     resetUndo();
     setDocId(id);
     setDoc(next);
@@ -193,6 +219,8 @@ export function App() {
     if (!r) return setNotice({ text: "这份简历无法打开（存档可能已被其他标签页修改）。", level: "error" });
     pristineSample.current = null;
     setCurrentId(id);
+    baseline.current = r.fingerprint;
+    setConflict(null);
     resetUndo();
     setDocId(id);
     setDoc(r.doc);
@@ -237,6 +265,8 @@ export function App() {
       if (!ids.includes(docId)) return;
       const r = loadDocument(docId);
       if (r) {
+        baseline.current = r.fingerprint;
+        skipSave.current = r.doc;
         setDoc(r.doc);
         setNotice({ text: "这份简历在其他设备上更新过，已载入最新版本。" });
       }
@@ -250,33 +280,91 @@ export function App() {
     layout.ready.then(setEngineReady, (e: Error) => setFatal(e.message));
   }, []);
 
-  // 提示自动消退：示例引导 9 秒，普通通知 6 秒；错误与可撤销通知常驻，由用户关闭
-  useEffect(() => {
-    if (!isSample) return;
-    const t = setTimeout(() => setIsSample(false), 9000);
-    return () => clearTimeout(t);
-  }, [isSample]);
+  // 普通通知 6 秒后消退；错误与可撤销通知常驻，由用户关闭。示例引导放在编辑区顶部，不自动消失
   useEffect(() => {
     if (!notice || notice.level === "error" || notice.undo || notice.sticky) return;
     const t = setTimeout(() => setNotice(null), 6000);
     return () => clearTimeout(t);
   }, [notice]);
 
-  // 本地自动保存。读档失败时 persist 为 false。merge 写失败不会覆盖原档。
+  // 本地自动保存。读档失败时 persist 为 false。merge 写失败不会覆盖原档；
+  // 存档被其他标签页改过时也不写，进入 conflict，等用户选择
   useEffect(() => {
     if (!persist) {
       setSavePhase("blocked");
       return;
     }
-    const err = saveCurrent(doc, docId, writeMode);
-    if (err) {
-      setSavePhase("failed");
-      setNotice({ text: `${err}屏幕上的内容还在。`, level: "error", sticky: true });
-    } else {
+    if (conflict) {
+      setSavePhase("conflict");
+      return;
+    }
+    if (skipSave.current === doc) {
+      skipSave.current = null;
+      setSavePhase("saved");
+      return;
+    }
+    const r = saveChecked(doc, docId, writeMode, writeMode === "replace" ? undefined : baseline.current);
+    if (r.ok) {
+      baseline.current = r.fingerprint;
       setSavePhase("saved");
       if (writeMode === "replace") setWriteMode("merge");
+    } else if (r.conflict) {
+      setConflict(r.conflict);
+      setSavePhase("conflict");
+    } else {
+      setSavePhase("failed");
+      setNotice({ text: `${r.message}屏幕上的内容还在，请尽快导出备份。`, level: "error", sticky: true });
     }
-  }, [doc, persist, docId, writeMode]);
+  }, [doc, persist, docId, writeMode, conflict]);
+
+  // 其他标签页写了存档：本页没有未写入的修改就直接载入新内容（可撤销）；有的话进入冲突，让用户决定
+  const onExternalChange = useRef<() => void>(() => undefined);
+  onExternalChange.current = () => {
+    if (!persist || conflict) return;
+    const fp = storedFingerprint(docId);
+    if (fp === undefined || fp === baseline.current) return;
+    if (fp === null || savePhase !== "saved") return setConflict({ deleted: fp === null });
+    const r = loadDocument(docId);
+    if (!r) return setConflict({ deleted: false });
+    baseline.current = r.fingerprint;
+    skipSave.current = r.doc;
+    remember(doc, false);
+    setDoc(r.doc);
+    setNotice({ text: "这份简历在另一标签页里改过，已载入最新内容。", undo: doc });
+  };
+  useEffect(() => {
+    const on = (e: StorageEvent) => {
+      if (e.storageArea === localStorage && isDocsKey(e.key)) onExternalChange.current();
+    };
+    window.addEventListener("storage", on);
+    return () => window.removeEventListener("storage", on);
+  }, []);
+
+  /** 冲突：放弃本页修改，载入另一标签页保存的版本（可撤销回本页的内容，但撤销后会覆盖它） */
+  function reloadFromStorage() {
+    const r = loadDocument(docId);
+    if (!r) return setNotice({ text: "存档里的这份简历无法打开，没有载入。可以另存副本或保留当前版本。", level: "error", sticky: true });
+    baseline.current = r.fingerprint;
+    skipSave.current = r.doc;
+    remember(doc, false);
+    setConflict(null);
+    setDoc(r.doc);
+    setNotice({ text: "已载入另一标签页保存的版本。" });
+  }
+  /** 冲突：本页内容另存为一份新简历，另一标签页的版本保持不动 */
+  function saveConflictCopy() {
+    const copy = duplicateDocument(doc);
+    startNew(copy);
+    setNotice({ text: "已把这一页的内容另存为副本，另一标签页保存的版本没有改动。都在「我的简历」里。" });
+  }
+  /** 冲突：用本页内容覆盖另一标签页的修改 */
+  function keepThisVersion() {
+    const fp = storedFingerprint(docId);
+    if (fp === undefined) return setNotice({ text: "读不出本地存档，没有写入。请先导出备份。", level: "error", sticky: true });
+    baseline.current = fp;
+    setConflict(null);
+    setNotice({ text: "已保留这一页的版本，另一标签页的修改被覆盖。" });
+  }
 
   // 本机历史：停止编辑 3 秒后，按规则（间隔 10 分钟、内容有变化）留一份快照。没改过的示例不留
   useEffect(() => {
@@ -287,7 +375,7 @@ export function App() {
 
   // 保存失败或存档读不出来时，关闭页面前提醒一句：屏幕上的内容还没存下来
   useEffect(() => {
-    if (savePhase !== "failed" && savePhase !== "blocked") return;
+    if (savePhase !== "failed" && savePhase !== "blocked" && savePhase !== "conflict") return;
     const warn = (e: BeforeUnloadEvent) => {
       e.preventDefault();
       e.returnValue = "";
@@ -389,11 +477,17 @@ export function App() {
     jumpTo(r.id);
   }
 
-  /** 大纲点一项：滚到中间对应的模块 */
+  /** 大纲点一项：切到编辑区，滚到对应模块，并把焦点移过去（键盘和读屏用户接着往下就是这个模块） */
   function jumpTo(id: string) {
     setActiveId(id);
+    switchPane("edit");
     jumping.current = Date.now();
-    requestAnimationFrame(() => document.getElementById(`module-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`module-${id}`);
+      if (!el) return;
+      el.focus({ preventScroll: true });
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 
   // 快捷键：Ctrl+S 不弹浏览器的「另存网页」，告诉用户已经自动保存；Ctrl+P 直接导出 PDF（打印编辑器本身没有意义）
@@ -412,7 +506,10 @@ export function App() {
     }
     if (k === "s") {
       e.preventDefault();
-      setNotice({ text: persist ? "不用手动保存：每次修改都会自动存在这个浏览器里。" : "本地存档读不出来，现在的修改不会保存。先用「导出」备份。", level: persist ? "info" : "error" });
+      if (!persist) setNotice({ text: "本地存档读不出来，现在的修改不会保存。先用「导出」备份。", level: "error" });
+      else if (savePhase === "failed") setNotice({ text: "本地保存失败，修改尚未写入。请立即用「导出」备份。", level: "error", sticky: true });
+      else if (savePhase === "conflict") setNotice({ text: "另一标签页改过这份简历，自动保存已暂停。请在提示条里选择保留哪个版本。", level: "error" });
+      else setNotice({ text: "不用手动保存：每次修改都会自动存在这个浏览器里。" });
     } else if (k === "p") {
       e.preventDefault();
       if (engineReady && !exporting) exportPdf();
@@ -512,7 +609,7 @@ export function App() {
   }
 
   return (
-    <div className={`app${previewOpen ? "" : " preview-collapsed"}`} data-skin={skin}>
+    <div className={`app${previewOpen || narrow ? "" : " preview-collapsed"}`} data-skin={skin} data-pane={narrow ? mobilePane : undefined}>
       {view === "editor" && (
         <a className="skip-link" href="#editor-main">
           跳到编辑区
@@ -536,9 +633,16 @@ export function App() {
           <button type="button" className="doc-title" title="在「我的简历」里切换、改名" onClick={() => setView("library")}>
             {doc.meta.alias?.trim() || doc.meta.title}
           </button>
-          <span className={`save-state${savePhase === "failed" || savePhase === "blocked" ? " blocked" : savePhase === "pending" ? " pending" : issues.length > 0 ? " warn" : ""}`}>
+          <span
+            className={`save-state${savePhase === "failed" || savePhase === "blocked" || savePhase === "conflict" ? " blocked" : savePhase === "pending" ? " pending" : issues.length > 0 ? " warn" : ""}`}
+            title={saveStatusText(savePhase, issues.length)}
+            role="status"
+          >
             <i aria-hidden="true" />
-            {saveStatusText(savePhase, issues.length)}
+            <span className="save-full">{saveStatusText(savePhase, issues.length)}</span>
+            <span className="save-short" aria-hidden="true">
+              {saveStatusShort(savePhase)}
+            </span>
           </span>
         </div>
 
@@ -578,15 +682,15 @@ export function App() {
       </header>
 
       <div className="toasts">
-        {isSample && (
-          <div className="toast info">
-            <span>这是虚构的示例简历，换成你自己的内容就能直接导出。</span>
+        {conflict && (
+          <div className="toast error conflict" role="alert">
+            <span>
+              {conflict.deleted ? "这份简历在另一标签页里被删除了" : "这份简历在另一标签页里修改过"}，为免互相覆盖，自动保存已暂停。这一页的内容还在，选一个处理方式：
+            </span>
             <span className="toast-actions">
-              <button onClick={() => replaceAll(createEmptyDocument())}>从空白开始</button>
-              <button onClick={() => fileInput.current?.click()}>导入文件</button>
-              <button aria-label="关闭提示" onClick={() => setIsSample(false)}>
-                ×
-              </button>
+              {!conflict.deleted && <button onClick={reloadFromStorage}>载入另一页的版本</button>}
+              <button onClick={saveConflictCopy}>另存为副本</button>
+              <button onClick={keepThisVersion}>保留这一页的版本</button>
             </span>
           </div>
         )}
@@ -663,9 +767,26 @@ export function App() {
         />
       ) : (
       <main className="stage">
+        {narrow && (
+          <div className="pane-switch seg" role="tablist" aria-label="编辑或预览">
+            <button type="button" role="tab" id="tab-edit" aria-selected={mobilePane === "edit"} aria-controls="pane-edit" className={mobilePane === "edit" ? "on" : ""} onClick={() => switchPane("edit")}>
+              编辑
+            </button>
+            <button type="button" role="tab" id="tab-preview" aria-selected={mobilePane === "preview"} aria-controls="pane-preview" className={mobilePane === "preview" ? "on" : ""} onClick={() => switchPane("preview")}>
+              预览
+              {preview?.result && (
+                <>
+                  <i className={`fit-dot ${describeFit(preview.result).level}`} aria-hidden="true" title={describeFit(preview.result).short} />
+                  <span className="sr-only">（{describeFit(preview.result).short}）</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
         {/* 写作面板：浮在画布左侧。顶部是模块标签，下面整篇连着写 */}
         <aside
           className="studio"
+          id="pane-edit"
           aria-label="编辑"
           onPointerMove={(e) => {
             // 写作面板里跟着鼠标的一团柔光
@@ -682,6 +803,24 @@ export function App() {
           )}
         <section className="editor" id="editor-main" tabIndex={-1} aria-label="编辑区" ref={editorRef}>
           <div className="doc-editor">
+            {isSample && (
+              <div className="sample-strip">
+                <p>
+                  <strong>这是虚构的示例简历。</strong>换成你自己的内容就能直接导出，也可以：
+                </p>
+                <span className="sample-actions">
+                  <button type="button" className="primary" onClick={() => replaceAll(createEmptyDocument())}>
+                    空白开始
+                  </button>
+                  <button type="button" onClick={() => fileInput.current?.click()}>
+                    导入文件
+                  </button>
+                  <button type="button" className="icon-btn" aria-label="收起这条提示" title="收起" onClick={() => setIsSample(false)}>
+                    <Icon name="close" size={14} />
+                  </button>
+                </span>
+              </div>
+            )}
             {issues.length > 0 && (
               <ul className="problems" aria-label="需要修正的内容">
                 {issues.slice(0, 6).map((i) => (
@@ -712,9 +851,9 @@ export function App() {
         </section>
         </aside>
 
-        {previewOpen ? (
-        <section className="preview" aria-label="A4 预览">
-          <Preview data={preview} error={fatal} busy={busy} zoom={zoom} onZoom={setZoom} onCollapse={() => togglePreview(false)} onJump={jumpTo} order={doc.modules.map((m) => m.id)} />
+        {previewOpen || narrow ? (
+        <section className="preview" id="pane-preview" aria-label="A4 预览" ref={previewRef}>
+          <Preview data={preview} error={fatal} busy={busy} zoom={zoom} onZoom={setZoom} onCollapse={narrow ? undefined : () => togglePreview(false)} onJump={jumpTo} order={doc.modules.map((m) => m.id)} />
         </section>
         ) : (
           <button type="button" className="preview-rail" onClick={() => togglePreview(true)} aria-label="展开 A4 预览">
@@ -747,4 +886,17 @@ export function App() {
       {overflowDialog && <OverflowDialog onExport={(m) => exportPdf(m)} onClose={() => setOverflowDialog(false)} />}
     </div>
   );
+}
+
+/** 跟随媒体查询变化 */
+function useMedia(query: string): boolean {
+  const [match, setMatch] = useState(() => typeof window !== "undefined" && window.matchMedia(query).matches);
+  useEffect(() => {
+    const m = window.matchMedia(query);
+    const on = () => setMatch(m.matches);
+    on();
+    m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, [query]);
+  return match;
 }

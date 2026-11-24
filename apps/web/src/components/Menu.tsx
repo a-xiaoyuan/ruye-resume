@@ -1,5 +1,6 @@
 // 顶栏下拉菜单与品牌标志
 import { useEffect, useRef, useState } from "react";
+import { menuKeys, Popover } from "./Popover.tsx";
 
 export interface MenuItem {
   key: string;
@@ -24,32 +25,64 @@ export function Logo() {
 export function Menu({ label, items, onPick, right }: { label: string; items: MenuItem[]; onPick: (key: string) => void; right?: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+  // 关闭时把焦点还给触发按钮（点了外面别的地方时不抢焦点）
+  const close = (restore: boolean) => {
+    setOpen(false);
+    if (restore) trigger.current?.focus();
+  };
   useEffect(() => {
     if (!open) return;
-    const close = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    // 打开后焦点落到第一项，方向键就能直接选
+    requestAnimationFrame(() => list.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus());
+    const outside = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (!ref.current?.contains(t) && !list.current?.contains(t)) setOpen(false);
     };
-    const esc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", close);
-    document.addEventListener("keydown", esc);
-    return () => {
-      document.removeEventListener("mousedown", close);
-      document.removeEventListener("keydown", esc);
-    };
+    document.addEventListener("pointerdown", outside);
+    return () => document.removeEventListener("pointerdown", outside);
   }, [open]);
 
   return (
     <div className="menu" ref={ref}>
-      <button type="button" className="menu-trigger" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((v) => !v)}>
+      <button
+        ref={trigger}
+        type="button"
+        className="menu-trigger"
+        aria-expanded={open}
+        aria-haspopup="menu"
+        onClick={() => setOpen((v) => !v)}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown" && !open) {
+            e.preventDefault();
+            setOpen(true);
+          }
+        }}
+      >
         {label}
         <span className="caret" aria-hidden="true">
           ▾
         </span>
       </button>
       {open && (
-        <div className={`menu-list${right ? " right" : ""}`} role="menu">
+        <Popover
+          anchor={trigger}
+          right={right}
+          className={`menu-list${right ? " right" : ""}`}
+          role="menu"
+          label={label}
+          popRef={list}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              close(true);
+            } else if (e.key === "Tab") {
+              close(false);
+              trigger.current?.focus();
+            } else menuKeys(e, list.current);
+          }}
+        >
           {items.map((it) => (
             <div key={it.key} role="none">
               {it.section && (
@@ -60,8 +93,9 @@ export function Menu({ label, items, onPick, right }: { label: string; items: Me
               <button
                 type="button"
                 role="menuitem"
+                tabIndex={-1}
                 onClick={() => {
-                  setOpen(false);
+                  close(true);
                   onPick(it.key);
                 }}
               >
@@ -70,7 +104,7 @@ export function Menu({ label, items, onPick, right }: { label: string; items: Me
               </button>
             </div>
           ))}
-        </div>
+        </Popover>
       )}
     </div>
   );

@@ -38,6 +38,24 @@ export function Preview({ data, error, busy, zoom, onZoom, onCollapse, onJump, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
+  // 版面标尺可以收起：手机上它占掉纸右边一大块，看全文时先收起来
+  const [meter, setMeter] = useState(() => {
+    try {
+      return localStorage.getItem("ruye.meter") !== "off";
+    } catch {
+      return true;
+    }
+  });
+  const toggleMeter = () => {
+    setMeter(!meter);
+    try {
+      localStorage.setItem("ruye.meter", meter ? "off" : "on");
+    } catch {
+      /* 存不了就只在这次生效 */
+    }
+  };
+  const hasMeter = !!r && (r.status.startsWith("fitted") || r.status === "overflow");
+
   // 纸面上的高光跟着鼠标移动（纸本身不动，不倾斜）
   const board = useRef<HTMLDivElement>(null);
   const light = (e: PointerEvent<HTMLDivElement>) => {
@@ -73,6 +91,11 @@ export function Preview({ data, error, busy, zoom, onZoom, onCollapse, onJump, o
             +
           </button>
         </div>
+        {hasMeter && (
+          <button type="button" className="meter-toggle" aria-pressed={meter} title={meter ? "收起纸右侧的版面标尺" : "显示各模块占用的版面"} onClick={toggleMeter}>
+            {meter ? "收起标尺" : "显示标尺"}
+          </button>
+        )}
         {onCollapse && (
           <button type="button" className="collapse-btn" onClick={onCollapse} aria-label="收起预览" title="收起预览，把地方让给编辑区">
             <Icon name="panelRight" size={16} />
@@ -101,7 +124,7 @@ export function Preview({ data, error, busy, zoom, onZoom, onCollapse, onJump, o
               </ul>
             </div>
           )}
-          <div className="board-wrap" onPointerMove={light}>
+          <div className={`board-wrap${hasMeter && meter ? "" : " no-meter"}`} onPointerMove={light}>
             <div className="board" ref={board} style={{ aspectRatio: `210 / ${data.boardMm}`, width: `${zoom * 100}%` }}>
               <span key={sweep} className="scan" aria-hidden="true" />
               <span className="sheen" aria-hidden="true" />
@@ -116,7 +139,7 @@ export function Preview({ data, error, busy, zoom, onZoom, onCollapse, onJump, o
                 </span>
               )}
               <div className="svg" dangerouslySetInnerHTML={{ __html: data.svg }} />
-              {(r.status.startsWith("fitted") || r.status === "overflow") && <PageMeter result={r} boardMm={data.boardMm} order={order ?? []} onJump={onJump} />}
+              {hasMeter && meter && <PageMeter result={r} boardMm={data.boardMm} order={order ?? []} onJump={onJump} />}
               {r.status === "overflow" && (
                 <div className="overflow-zone" style={{ top: `${(A4_HEIGHT_MM / data.boardMm) * 100}%` }}>
                   <span>A4 底边 · 以下超出约 {Math.round(r.metrics.overflowMm)}mm</span>

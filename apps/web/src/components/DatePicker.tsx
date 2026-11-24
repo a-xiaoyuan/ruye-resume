@@ -103,7 +103,15 @@ export function MonthPicker({ label, value, onChange, allowPresent, kind = "sing
   const yearStart = year - 7;
 
   return (
-    <div className={`field-block date-field${open ? " open" : ""}`} ref={root}>
+    <div
+      className={`field-block date-field${open ? " open" : ""}`}
+      ref={root}
+      onBlur={(e) => {
+        // Tab 离开整个日期框（包括弹层）时关上弹层；点外面由 pointerdown 处理
+        const to = e.relatedTarget as Node | null;
+        if (open && to && !root.current?.contains(to)) setOpen(false);
+      }}
+    >
       <label id={`${id}-l`} htmlFor={id}>
         {label}
       </label>

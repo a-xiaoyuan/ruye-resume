@@ -5,6 +5,7 @@ import { addItem, itemTitle, moveItem, removeItem, replaceModule, updateItem, ty
 import { Icon } from "./icons.tsx";
 import { BulletList, ChoiceField, PhotoField, TagInput, TextArea, TextField } from "./fields.tsx";
 import { DateRange, MonthPicker } from "./DatePicker.tsx";
+import { radioKeys, radioTabIndex } from "../a11y.ts";
 
 /** 经历类模块的写法提示，收在「写法提示」里，需要时展开 */
 const BULLET_GUIDE = [
@@ -52,7 +53,7 @@ export function ModuleEditor({ doc, module: m, onChange, onRemove, onError, onRe
   const patchData = (patch: Record<string, unknown>) => onChange(replaceModule(doc, m.id, (x) => ({ ...x, data: { ...x.data, ...patch } }) as Module));
 
   return (
-    <section className={`module-editor${m.visible ? "" : " is-hidden"}`} id={`module-${m.id}`} data-module={m.id} aria-labelledby={`module-title-${m.id}`}>
+    <section className={`module-editor${m.visible ? "" : " is-hidden"}`} id={`module-${m.id}`} data-module={m.id} tabIndex={-1} aria-labelledby={`module-title-${m.id}`}>
       <div className="editor-head">
         <h2 id={`module-title-${m.id}`}>{MODULE_LABELS[m.type]}</h2>
         {!m.visible && <span className="badge">已隐藏，不会出现在简历里</span>}
@@ -79,29 +80,35 @@ export function ModuleEditor({ doc, module: m, onChange, onRemove, onError, onRe
           <TextField label="电话" value={m.data.phone} onChange={(v) => patchData({ phone: v })} type="tel" />
           <TextField label="邮箱" value={m.data.email} onChange={(v) => patchData({ email: v })} type="email" />
           <TextField label="所在城市" value={m.data.location} onChange={(v) => patchData({ location: v })} placeholder="如 天津" />
-          <TextField label="GitHub" value={m.data.github} onChange={(v) => patchData({ github: v })} placeholder="https://github.com/…" />
-          <TextField label="个人网站" value={m.data.website} onChange={(v) => patchData({ website: v })} />
-          <TextField label="博客" value={m.data.blog} onChange={(v) => patchData({ blog: v })} />
-          <ChoiceField label="性别（可选）" value={m.data.gender} onChange={(v) => patchData({ gender: v })} options={["男", "女"]} />
-          <MonthPicker label="出生年月（可选）" value={m.data.birthday} onChange={(v) => patchData({ birthday: v })} related={`${new Date().getFullYear() - 21}-01`} />
-          {m.data.birthday && (
-            <div className="field-block">
-              <span className="field-label">简历上显示为</span>
-              <div className="seg" role="radiogroup" aria-label="出生年月在简历上显示为">
-                {(
-                  [
-                    ["date", "出生年月"],
-                    ["age", ageFrom(m.data.birthday) !== null ? `年龄（${ageFrom(m.data.birthday)} 岁）` : "年龄"],
-                  ] as const
-                ).map(([k, label]) => (
-                  <button key={k} type="button" role="radio" aria-checked={(m.data.birthdayAs ?? "date") === k} className={(m.data.birthdayAs ?? "date") === k ? "on" : ""} onClick={() => patchData({ birthdayAs: k })}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
           <PhotoField value={m.data.photoDataUrl} onChange={(v) => patchData({ photoDataUrl: v })} onError={onError} />
+          {/* 不是每份简历都要的资料收在这里；填过的话默认展开 */}
+          <details className="guide more-fields" open={!!(m.data.github || m.data.website || m.data.blog || m.data.gender || m.data.birthday) || undefined}>
+            <summary>更多资料（GitHub、个人网站、性别、出生年月）</summary>
+            <div className="form-grid">
+              <TextField label="GitHub" value={m.data.github} onChange={(v) => patchData({ github: v })} placeholder="https://github.com/…" />
+              <TextField label="个人网站" value={m.data.website} onChange={(v) => patchData({ website: v })} />
+              <TextField label="博客" value={m.data.blog} onChange={(v) => patchData({ blog: v })} />
+              <ChoiceField label="性别（可选）" value={m.data.gender} onChange={(v) => patchData({ gender: v })} options={["男", "女"]} />
+              <MonthPicker label="出生年月（可选）" value={m.data.birthday} onChange={(v) => patchData({ birthday: v })} related={`${new Date().getFullYear() - 21}-01`} />
+              {m.data.birthday && (
+                <div className="field-block">
+                  <span className="field-label">简历上显示为</span>
+                  <div className="seg" role="radiogroup" aria-label="出生年月在简历上显示为" onKeyDown={radioKeys}>
+                    {(
+                      [
+                        ["date", "出生年月"],
+                        ["age", ageFrom(m.data.birthday) !== null ? `年龄（${ageFrom(m.data.birthday)} 岁）` : "年龄"],
+                      ] as const
+                    ).map(([k, label], i) => (
+                      <button key={k} type="button" role="radio" aria-checked={(m.data.birthdayAs ?? "date") === k} tabIndex={radioTabIndex((m.data.birthdayAs ?? "date") === k, i, true)} className={(m.data.birthdayAs ?? "date") === k ? "on" : ""} onClick={() => patchData({ birthdayAs: k })}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </details>
         </div>
       )}
 

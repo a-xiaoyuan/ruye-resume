@@ -18,6 +18,7 @@ import {
 } from "../cloud.ts";
 import { describeReport, detachedIds, loadSyncState, reattach, runSync, saveSyncState, type LocalStore } from "../sync.ts";
 import { Icon } from "./icons.tsx";
+import { menuKeys, Popover } from "./Popover.tsx";
 
 type Status = { phase: "idle" | "syncing" | "ok" | "error"; text: string; at?: number };
 
@@ -158,6 +159,8 @@ export function AccountMenu({ cloud, loginSignal = 0 }: { cloud: Cloud; /** 每�
   // 打开找回密码链接（…/#reset=令牌）时直接弹出设置新密码
   const [resetToken, setResetToken] = useState<string | null>(() => (cloud.enabled ? readResetToken(window.location.hash) : null));
   const ref = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const list = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!resetToken) return;
@@ -167,9 +170,13 @@ export function AccountMenu({ cloud, loginSignal = 0 }: { cloud: Cloud; /** 每�
 
   useEffect(() => {
     if (!open) return;
-    const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
+    requestAnimationFrame(() => list.current?.querySelector<HTMLElement>('[role="menuitem"]:not(:disabled)')?.focus());
+    const close = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (!ref.current?.contains(t) && !list.current?.contains(t)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
   }, [open]);
 
   if (!cloud.enabled) return null;
@@ -196,13 +203,30 @@ export function AccountMenu({ cloud, loginSignal = 0 }: { cloud: Cloud; /** 每�
   };
   return (
     <div className="menu account" ref={ref}>
-      <button type="button" className={`account-btn signed-in ${phase}`} aria-expanded={open} aria-label={text || "云同步"} onClick={() => setOpen((x) => !x)} title={text}>
+      <button ref={trigger} type="button" className={`account-btn signed-in ${phase}`} aria-haspopup="menu" aria-expanded={open} aria-label={text || "云同步"} onClick={() => setOpen((x) => !x)} title={text}>
         <Icon name="cloud" size={15} />
         <span className="sync-dot" aria-hidden="true" />
         <span className="btn-text">{phase === "syncing" ? "同步中" : phase === "error" ? "同步出错" : "已同步"}</span>
       </button>
       {open && (
-        <div className="menu-list right account-pop" role="menu">
+        <Popover
+          anchor={trigger}
+          right
+          className="menu-list right account-pop"
+          role="menu"
+          label="云同步"
+          popRef={list}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              setOpen(false);
+              trigger.current?.focus();
+            } else if (e.key === "Tab") {
+              setOpen(false);
+              trigger.current?.focus();
+            } else menuKeys(e, list.current);
+          }}
+        >
           <div className="account-head">
             <Icon name="user" size={16} />
             <span>{cloud.session.user.email}</span>
@@ -237,7 +261,7 @@ export function AccountMenu({ cloud, loginSignal = 0 }: { cloud: Cloud; /** 每�
           <button type="button" role="menuitem" className="danger" onClick={pick(() => setDialog("delete"))}>
             注销账号…
           </button>
-        </div>
+        </Popover>
       )}
       {dialog === "delete" && <DeleteAccountDialog onClose={() => setDialog(null)} onSubmit={cloud.deleteAccount} />}
       {resetDialog}

@@ -12,5 +12,5 @@
     "resolveJsonModule": true,
     "types": ["node"]
   },
-  "include": ["packages/*/src", "tests", "scripts/*.ts"]
+  "include": ["packages/*/src", "tests", "scripts/*.ts", "apps/web/src/pdfjs-worker.d.ts"]
 }

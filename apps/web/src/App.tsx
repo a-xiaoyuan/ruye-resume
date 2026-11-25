@@ -18,7 +18,8 @@ import { ModuleEditor } from "./components/ModuleEditor.tsx";
 import { Preview, type PreviewData } from "./components/Preview.tsx";
 import { AccountMenu, useCloudSync } from "./components/AccountMenu.tsx";
 import { SAMPLES } from "./samples.ts";
-import { parseImport } from "./import-file.ts";
+import { importFileBytes } from "./import-file.ts";
+import { exportDocx } from "./docx.ts";
 import { Logo, Menu } from "./components/Menu.tsx";
 import { ModulePills, Sidebar } from "./components/Sidebar.tsx";
 import { Icon } from "./components/icons.tsx";
@@ -384,7 +385,7 @@ export function App() {
     return () => window.removeEventListener("beforeunload", warn);
   }, [savePhase]);
 
-  // 把 .ruye.json / .md 文件直接拖进窗口就能导入（另存为一份新简历）
+  // 把 .ruye.json / .md / .pdf 直接拖进窗口就能导入（另存为一份新简历）
   const [dragging, setDragging] = useState(false);
   useEffect(() => {
     const hasFile = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].includes("Files");
@@ -464,11 +465,15 @@ export function App() {
     setView("editor");
   };
   async function importFile(file: File) {
-    const r = parseImport(file.name, await file.text());
-    if (!r.ok) return setNotice({ text: r.message, level: "error", sticky: r.sticky });
-    replaceAll(r.doc);
-    setRawBackup(null);
-    setNotice({ text: r.message, level: r.level, sticky: r.sticky });
+    try {
+      const r = await importFileBytes(file.name, file.type, new Uint8Array(await file.arrayBuffer()));
+      if (!r.ok) return setNotice({ text: r.message, level: "error", sticky: r.sticky });
+      replaceAll(r.doc);
+      setRawBackup(null);
+      setNotice({ text: r.message, level: r.level, sticky: r.sticky });
+    } catch (e) {
+      setNotice({ text: `导入失败：${(e as Error).message}。当前简历没有被替换。`, level: "error", sticky: true });
+    }
   }
 
   function addNewModule(type: ModuleType) {
@@ -606,6 +611,11 @@ export function App() {
         });
       }
     } else if (key === "md") download(`${exportBaseName(doc)}.md`, toMarkdown(doc), "text/markdown");
+    else if (key === "docx") {
+      const out = exportDocx(doc);
+      download(`${exportBaseName(doc)}.docx`, out.bytes as Uint8Array<ArrayBuffer>, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+      setNotice({ text: `已导出可编辑的 Word。${out.notes.join("")}`, sticky: true });
+    }
   }
 
   return (
@@ -669,9 +679,10 @@ export function App() {
             items={[
               { key: "json", label: "导出 .ruye.json", hint: "备份，可再次导入" },
               { key: "md", label: "导出 Markdown", hint: "可版本管理" },
+              { key: "docx", label: "导出 Word", hint: "可编辑的 .docx" },
             ]}
           />
-          <input ref={fileInput} type="file" accept=".json,.md,.txt" hidden onChange={(e) => (e.target.files?.[0] && importFile(e.target.files[0]), (e.target.value = ""))} />
+          <input ref={fileInput} type="file" accept=".json,.md,.txt,.pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden onChange={(e) => (e.target.files?.[0] && importFile(e.target.files[0]), (e.target.value = ""))} />
           <button className="primary" aria-label="下载 PDF" disabled={!engineReady || exporting} onClick={() => exportPdf()}>
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path d="M8 2v8m0 0L5 7m3 3 3-3M3 12.5h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
@@ -867,7 +878,7 @@ export function App() {
 
       {dragging && (
         <div className="drop-hint" aria-hidden="true">
-          <span>松开即可导入：.ruye.json 或 Markdown，会另存为一份新简历</span>
+          <span>松开即可导入：JSON、Markdown、可复制文字的 PDF 或 Word（.docx），会另存为一份新简历</span>
         </div>
       )}
       {historyFor && (

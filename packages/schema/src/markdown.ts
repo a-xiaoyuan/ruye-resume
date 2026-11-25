@@ -135,7 +135,7 @@ export function toMarkdown(doc: RuyeDocument): string {
 
 // ---------------------------------------------------------------- 导入
 
-const HEADING_ALIASES: Record<string, ModuleType> = {
+export const HEADING_ALIASES: Record<string, ModuleType> = {
   基本信息: "basic_info",
   个人信息: "basic_info",
   求职意向: "job_intention",
